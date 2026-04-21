@@ -24,18 +24,24 @@ tiers first.
 These turn the app from "field tool" into "demo-able product."
 
 ### 1.1 Camera + photo capture on items
-- [ ] Wire the Camera button in `ApartmentDetail.tsx` to open the device camera
-  (`<input type="file" accept="image/*" capture="environment">` on mobile)
-- [ ] Upload to Supabase Storage bucket `item-photos/{project_id}/{apartment_id}/{item_id}.jpg`
-- [ ] Persist public URL into `items.image_url`
-- [ ] Show thumbnail inline on the item card, tap to enlarge
-- [ ] RLS policy on `item-photos` storage bucket (same access rules as `items`)
+- [x] Wire capture UI in `ApartmentDetail.tsx` via hidden `<input type="file" accept="image/*" capture="environment">`
+- [x] Upload to Supabase Storage bucket `item-photos/{project_id}/{apartment_id}/{uuid}.jpg`
+- [x] Persist public URL into `items.image_url`
+- [x] Show thumbnail inline on the item card, tap to open full-size
+- [x] RLS policies on `item-photos` storage bucket (project-member read/upload, manager+admin delete)
+- [ ] Later: attach a photo to an *existing* item (current flow creates a new item per photo)
 
-### 1.2 Vision-autofill: photo → structured item ⭐️ *killer feature*
-- [ ] New edge function `parse-image-item` (spec: `specs/camera-vision-autofill.md`)
-- [ ] New FAB or button on ApartmentDetail: "Scan item" (camera icon + sparkle)
-- [ ] One-tap UX: shutter → spinner → item appears pre-filled → user confirms
-- [ ] Fallback: on vision failure, open manual edit dialog with photo attached
+### 1.2 Vision-autofill: photo → structured item ⭐️ *killer feature — shipped*
+- [x] New edge function `parse-image-item` (Claude Sonnet 4.5 via Lovable AI Gateway)
+- [x] New "צלם" button on `ApartmentDetail` bottom bar (ImagePlus icon, outline variant)
+- [x] One-tap UX: camera → compress → vision → auto-insert pre-filled item
+- [x] AI badge + low-confidence badge on items with `source='image'` and `ai_confidence < 0.6`
+- [x] Defensive normalisation in the edge function — enum coercion, weight fallback, confidence clamp
+- [ ] **Activation prerequisites (you must do these before the feature works):**
+   - Apply the new migration `20260421000000_camera_vision_autofill.sql` in Supabase
+   - Deploy the function: `supabase functions deploy parse-image-item`
+   - Set `LOVABLE_API_KEY` in Supabase → Project Settings → Edge Functions → Secrets
+- [ ] Polish later: fallback edit dialog if vision fails (currently we toast + abort)
 
 ### 1.3 Sustainability receipt PDF
 - [ ] Material → weight → CO₂-eq mapping table (spec: `specs/sustainability-receipt-pdf.md`)

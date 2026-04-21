@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, type ChangeEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,46 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2 } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+
+// ---------- image helpers (scan flow) ------------------------------------
+// Resize to `maxLongSide` and encode as JPEG at `quality`. Keeps payloads
+// well under the 10MB edge-function cap and the ~1MB/ request target.
+async function compressImageToJpeg(file: File, maxLongSide: number, quality: number): Promise<Blob> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('image decode failed'));
+    el.src = dataUrl;
+  });
+  const scale = Math.min(1, maxLongSide / Math.max(img.width, img.height));
+  const w = Math.round(img.width * scale);
+  const h = Math.round(img.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas context unavailable');
+  ctx.drawImage(img, 0, 0, w, h);
+  return new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/jpeg', quality),
+  );
+}
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
 interface Item {
   id: string;
   description: string;
@@ -22,6 +60,9 @@ interface Item {
   material_category: string;
   estimated_weight_kg: number | null;
   image_url: string | null;
+  condition?: 'as_new' | 'good' | 'needs_repair' | 'scrap_only' | null;
+  ai_confidence?: number | null;
+  source?: 'voice' | 'text' | 'image' | 'manual' | null;
   created_by_user_id: string;
   collected_by_user_id: string | null;
   created_by?: {
@@ -62,6 +103,8 @@ export default function ApartmentDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [scanning, setScanning] = useState(false);
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -295,6 +338,77 @@ export default function ApartmentDetail() {
       setProcessing(false);
     }
   };
+  // ---- Camera + vision autofill ----------------------------------------
+  const openCameraPicker = () => {
+    if (scanning || processing || recording) return;
+    fileInputRef.current?.click();
+  };
+  const handleImageCapture = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input so the same file can be picked again later.
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('יש לבחור קובץ תמונה');
+      return;
+    }
+    setScanning(true);
+    try {
+      const compressed = await compressImageToJpeg(file, 1600, 0.8);
+      const base64 = await blobToBase64(compressed);
+      const { data: parseData, error: parseError } = await supabase.functions.invoke('parse-image-item', {
+        body: { image_base64: base64, apartment_id: apartmentId },
+      });
+      if (parseError) throw parseError;
+      const parsed = parseData?.item;
+      if (!parsed?.description) throw new Error('AI לא זיהה פריט');
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not found');
+
+      // Upload the compressed JPEG to the item-photos bucket.
+      const photoUuid = crypto.randomUUID();
+      const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from('item-photos')
+        .upload(path, compressed, {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+      if (uploadError) throw uploadError;
+      const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
+
+      // Insert the item with AI-derived fields + photo URL.
+      const { error: insertError } = await supabase.from('items').insert({
+        project_id: projectId,
+        apartment_id: apartmentId,
+        description: parsed.description,
+        quantity: parsed.quantity ?? 1,
+        location: parsed.location || null,
+        intended_for_collection: parsed.intended_for_collection !== false,
+        item_type: parsed.item_type as any,
+        material_category: parsed.material_category as any,
+        estimated_weight_kg: parsed.estimated_weight_kg ?? null,
+        condition: parsed.condition as any,
+        ai_confidence: parsed.ai_confidence ?? null,
+        source: 'image' as any,
+        image_url: publicUrl.publicUrl,
+        created_by_user_id: user.id,
+      } as any);
+      if (insertError) throw insertError;
+
+      const lowConf = (parsed.ai_confidence ?? 1) < 0.6;
+      toast.success(
+        lowConf ? 'פריט נוסף — מומלץ לאמת תיאור' : `פריט נוסף · ${parsed.description}`,
+      );
+      await loadData();
+    } catch (err: any) {
+      console.error('scan failed:', err);
+      toast.error(err?.message ? `שגיאה בסריקה: ${err.message}` : 'שגיאה בסריקה');
+    } finally {
+      setScanning(false);
+    }
+  };
   const updateItem = async (itemId: string, updates: Partial<Item>) => {
     try {
       // If marking as collected, add the current user as collected_by
@@ -432,13 +546,39 @@ export default function ApartmentDetail() {
               <CardContent className="p-3 sm:p-4">
                 <div className="flex flex-col gap-2">
                   <div className="flex items-start gap-2 sm:gap-3 w-full">
+                    {item.image_url && (
+                      <a
+                        href={item.image_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 block h-14 w-14 sm:h-16 sm:w-16 rounded-md overflow-hidden border border-border bg-muted"
+                        aria-label="הצג תמונת פריט"
+                      >
+                        <img src={item.image_url} alt={item.description} className="h-full w-full object-cover" loading="lazy" />
+                      </a>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm sm:text-base mb-1 break-words">{item.description}</p>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <p className="font-semibold text-sm sm:text-base break-words">{item.description}</p>
+                        {item.source === 'image' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground">
+                            <Sparkles className="h-2.5 w-2.5" /> AI
+                          </span>
+                        )}
+                        {typeof item.ai_confidence === 'number' && item.ai_confidence < 0.6 && (
+                          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                            יש לאמת
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                         <span className="whitespace-nowrap">כמות: {item.quantity}</span>
                         {item.location && <><span>•</span><span className="break-words">{item.location}</span></>}
                         <span>•</span>
                         <span className="capitalize whitespace-nowrap">{item.material_category}</span>
+                        {item.estimated_weight_kg != null && (
+                          <><span>•</span><span className="whitespace-nowrap">{item.estimated_weight_kg} ק"ג</span></>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 text-xs text-muted-foreground mt-1">
                         {item.created_by && <span className="break-words">הוסף על ידי: {item.created_by.name}</span>}
@@ -493,7 +633,7 @@ export default function ApartmentDetail() {
 
       <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-background border-t shadow-lg">
         <div className="flex gap-2 w-full">
-          <Button onClick={toggleRecording} size="lg" className="flex-1 gap-2 h-12 sm:h-14 text-base sm:text-lg relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing}>
+          <Button onClick={toggleRecording} size="lg" className="flex-1 gap-2 h-12 sm:h-14 text-base sm:text-lg relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
             {processing ? <>
                 <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
                 <span>מעבד נתונים...</span>
@@ -505,11 +645,41 @@ export default function ApartmentDetail() {
                 <span>הקלט פריטים</span>
               </>}
           </Button>
-          <Button onClick={() => setShowManualDialog(true)} size="lg" className="gap-2 h-12 sm:h-14 w-12 sm:w-auto px-3 sm:px-4" variant="outline" disabled={recording || processing}>
+          <Button
+            onClick={openCameraPicker}
+            size="lg"
+            variant={scanning ? 'secondary' : 'outline'}
+            disabled={recording || processing || scanning}
+            className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
+            aria-label="צלם פריט"
+            title="צלם פריט (AI)"
+          >
+            {scanning ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-muted-foreground"></div>
+                <span className="hidden sm:inline">מנתח…</span>
+              </>
+            ) : (
+              <>
+                <ImagePlus className="h-5 w-5 sm:h-6 sm:w-6" />
+                <span className="hidden sm:inline">צלם</span>
+              </>
+            )}
+          </Button>
+          <Button onClick={() => setShowManualDialog(true)} size="lg" className="gap-2 h-12 sm:h-14 w-12 sm:w-auto px-3 sm:px-4" variant="outline" disabled={recording || processing || scanning}>
             <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
             <span className="hidden sm:inline">ידני</span>
           </Button>
         </div>
+        {/* Hidden file input — opens the device camera on mobile, file picker on desktop. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleImageCapture}
+        />
       </div>
 
 
