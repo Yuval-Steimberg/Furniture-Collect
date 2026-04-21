@@ -1,0 +1,212 @@
+/* =========================================================================
+   Just A Second — Design System (furniture app port, Tailwind v3)
+   Brand: Noa Berant · Creative-reuse · Hebrew-first, RTL
+   Palette: cream paper, sage, slate, forest, one confident orange.
+
+   This file is a drop-in replacement for src/index.css in the furniture
+   evacuation app. All colors MUST be HSL (shadcn convention — do NOT
+   change this, the Tailwind config reads `hsl(var(--token))`).
+
+   Rules embedded in this file:
+   - Cream is the ground. Never bg-white on large areas.
+   - Orange is the primary CTA ONLY — one per screen (usually the Mic button).
+   - Success = sage-3 (a living green, NOT saturated).
+   - Warning = muted slate-amber (NOT bright yellow — that fights orange).
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ------------------------------------------------------------------ */
+    /* JAS primitive tokens (from Noa's brand guideline)                  */
+    /* ------------------------------------------------------------------ */
+    --jas-orange:   #E88225;
+    --jas-cream:    #FFFCF5;
+    --jas-sage:     #B5C9AD;
+    --jas-slate:    #626B65;
+    --jas-forest:   #333D36;
+
+    --jas-cream-2:  #F6F1E4;
+    --jas-cream-3:  #ECE5D1;
+    --jas-sage-2:   #D6E1CF;
+    --jas-sage-3:   #8FA688;
+    --jas-slate-2:  #4A524D;
+    --jas-orange-2: #C96A17;
+    --jas-orange-3: #F4A866;
+
+    /* ------------------------------------------------------------------ */
+    /* Shadcn-compatible semantic tokens (HSL)                            */
+    /* ------------------------------------------------------------------ */
+    --background: 42 100% 98%;            /* jas-cream   #FFFCF5 */
+    --foreground: 138 9% 22%;             /* jas-forest  #333D36 */
+
+    --card: 0 0% 100%;                    /* pure white only on small cards */
+    --card-foreground: 138 9% 22%;
+
+    --popover: 42 100% 98%;
+    --popover-foreground: 138 9% 22%;
+
+    /* Primary = JAS orange — reserve for ONE element per screen */
+    --primary: 29 80% 53%;                /* jas-orange  #E88225 */
+    --primary-foreground: 42 100% 98%;    /* jas-cream   #FFFCF5 */
+
+    /* Secondary = sage-2 (soft surface) */
+    --secondary: 105 22% 85%;             /* jas-sage-2  #D6E1CF */
+    --secondary-foreground: 138 9% 22%;
+
+    --muted: 43 42% 87%;                  /* jas-cream-3 #ECE5D1 */
+    --muted-foreground: 140 4% 40%;       /* jas-slate   #626B65 */
+
+    --accent: 105 22% 73%;                /* jas-sage    #B5C9AD */
+    --accent-foreground: 138 9% 22%;
+
+    --destructive: 11 61% 44%;            /* warm terracotta #B5452C */
+    --destructive-foreground: 42 100% 98%;
+
+    --border: 43 26% 82%;                 /* #DDD6C4 */
+    --input: 43 26% 82%;
+    --ring: 29 80% 53%;                   /* orange focus ring */
+
+    --radius: 0.875rem;                   /* 14px — jas --radius-md */
+
+    /* Success = sage-3 (living green, not saturated, NOT orange) */
+    --success: 105 13% 59%;               /* jas-sage-3  #8FA688 */
+    --success-foreground: 42 100% 98%;
+
+    /* Warning = muted warm ochre — distinct from primary but quiet */
+    --warning: 42 30% 55%;
+    --warning-foreground: 42 100% 98%;
+
+    /* Sidebar — forest panel with cream text (matches guideline) */
+    --sidebar-background: 138 9% 22%;     /* jas-forest */
+    --sidebar-foreground: 42 100% 98%;    /* jas-cream  */
+    --sidebar-primary: 29 80% 53%;        /* orange for active nav CTA only */
+    --sidebar-primary-foreground: 42 100% 98%;
+    --sidebar-accent: 138 9% 28%;         /* slightly lighter forest */
+    --sidebar-accent-foreground: 42 100% 98%;
+    --sidebar-border: 138 9% 32%;
+    --sidebar-ring: 29 80% 53%;
+
+    /* Fonts — Heebo is dual-script; Bowlby is Latin-only (rarely used here) */
+    --font-sans:    Heebo, ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Bowlby One SC', Heebo, system-ui, sans-serif;
+    --font-serif:   'Bowlby One SC', Heebo, serif;   /* legacy alias */
+    --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Paper-light warm shadows (replace harsh default material shadows) */
+    --shadow-sm: 0 1px 2px rgba(51, 61, 54, 0.06);
+    --shadow:    0 6px 16px -6px rgba(51, 61, 54, 0.16), 0 2px 4px rgba(51, 61, 54, 0.05);
+    --shadow-md: 0 10px 24px -10px rgba(51, 61, 54, 0.20), 0 2px 6px rgba(51, 61, 54, 0.06);
+    --shadow-lg: 0 24px 40px -20px rgba(51, 61, 54, 0.25), 0 4px 10px rgba(51, 61, 54, 0.06);
+
+    /* Motion (used by feature specs) */
+    --ease-standard: cubic-bezier(.2,.7,.2,1);
+    --ease-soft:     cubic-bezier(.4,.0,.2,1);
+    --dur-fast: 120ms;
+    --dur-med:  220ms;
+    --dur-slow: 420ms;
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* No dark mode in the JAS brand system. We keep `.dark` as an alias of  */
+  /* root tokens so any legacy `dark:` class on a parent doesn't break the */
+  /* tree — it simply renders identically to the light (cream) theme.     */
+  /* --------------------------------------------------------------------- */
+  .dark {
+    --background: 42 100% 98%;
+    --foreground: 138 9% 22%;
+    --card: 0 0% 100%;
+    --card-foreground: 138 9% 22%;
+    --popover: 42 100% 98%;
+    --popover-foreground: 138 9% 22%;
+    --primary: 29 80% 53%;
+    --primary-foreground: 42 100% 98%;
+    --secondary: 105 22% 85%;
+    --secondary-foreground: 138 9% 22%;
+    --muted: 43 42% 87%;
+    --muted-foreground: 140 4% 40%;
+    --accent: 105 22% 73%;
+    --accent-foreground: 138 9% 22%;
+    --destructive: 11 61% 44%;
+    --destructive-foreground: 42 100% 98%;
+    --border: 43 26% 82%;
+    --input: 43 26% 82%;
+    --ring: 29 80% 53%;
+    --success: 105 13% 59%;
+    --success-foreground: 42 100% 98%;
+    --warning: 42 30% 55%;
+    --warning-foreground: 42 100% 98%;
+    --sidebar-background: 138 9% 22%;
+    --sidebar-foreground: 42 100% 98%;
+    --sidebar-primary: 29 80% 53%;
+    --sidebar-primary-foreground: 42 100% 98%;
+    --sidebar-accent: 138 9% 28%;
+    --sidebar-accent-foreground: 42 100% 98%;
+    --sidebar-border: 138 9% 32%;
+    --sidebar-ring: 29 80% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Heebo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  /* Hebrew-first: site is RTL by default. Index.html should set dir="rtl". */
+  html[dir="rtl"] body { direction: rtl; }
+
+  /* Headings use Heebo (carries both scripts). Bowlby is reserved for the
+     occasional English hero lockup via .font-display. */
+  h1 { font-size: 64px; line-height: 1.05; font-weight: 800; color: hsl(var(--foreground)); margin: 0; }
+  h2 { font-size: 44px; line-height: 1.10; font-weight: 800; color: hsl(var(--foreground)); margin: 0; }
+  h3 { font-size: 28px; line-height: 1.20; font-weight: 700; color: hsl(var(--foreground)); margin: 0; }
+  h4 { font-size: 20px; line-height: 1.30; font-weight: 600; color: hsl(var(--foreground)); margin: 0; }
+
+  .font-display {
+    font-family: 'Bowlby One SC', Heebo, system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  /* Eyebrow — uppercase mini-label above section headings */
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  .overflow-wrap-anywhere { overflow-wrap: anywhere; }
+}
+
+/* Global scrollbar — warm, not default grey */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--jas-cream); }
+::-webkit-scrollbar-thumb { background: var(--jas-sage); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--jas-sage-3); }

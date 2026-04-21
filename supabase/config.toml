@@ -1,0 +1,7 @@
+project_id = "fdxqfwmtrqbaeqejynmu"
+
+[functions.parse-voice-items]
+verify_jwt = false
+
+[functions.send-invitation-email]
+verify_jwt = false
