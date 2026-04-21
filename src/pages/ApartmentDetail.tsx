@@ -106,7 +106,9 @@ export default function ApartmentDetail() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const itemPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [photoingItemId, setPhotoingItemId] = useState<string | null>(null);
   const { batch: undoBatch, push: pushUndo, dismiss: dismissUndo } = useUndoStack({ windowMs: 5000 });
   useEffect(() => {
     loadData();
@@ -414,6 +416,44 @@ export default function ApartmentDetail() {
       setScanning(false);
     }
   };
+  // Per-item photo attach — triggered by the small Camera icon on each
+  // item row. Unlike "צלם" (which creates a NEW item via vision autofill),
+  // this just attaches a reference photo to an existing item.
+  const openItemPhotoPicker = (itemId: string) => {
+    setPhotoingItemId(itemId);
+    itemPhotoInputRef.current?.click();
+  };
+  const attachPhotoToItem = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const itemId = photoingItemId;
+    if (e.target) e.target.value = '';
+    setPhotoingItemId(null);
+    if (!file || !itemId) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('יש לבחור קובץ תמונה');
+      return;
+    }
+    try {
+      const compressed = await compressImageToJpeg(file, 1600, 0.8);
+      const photoUuid = crypto.randomUUID();
+      const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from('item-photos')
+        .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
+      const { error: updateError } = await supabase
+        .from('items')
+        .update({ image_url: publicUrl.publicUrl } as any)
+        .eq('id', itemId);
+      if (updateError) throw updateError;
+      toast.success('תמונה צורפה לפריט');
+      await loadData();
+    } catch (err: any) {
+      console.error('attach photo failed:', err);
+      toast.error(err?.message ? `שגיאה בצירוף תמונה: ${err.message}` : 'שגיאה בצירוף תמונה');
+    }
+  };
   // Undo handler — deletes the ids in the active batch, skipping any
   // items already marked collected (the worker has confirmed those; we
   // never want to silently revert a confirmation).
@@ -635,11 +675,19 @@ export default function ApartmentDetail() {
                   }} className="h-9 w-9 sm:h-10 sm:w-10">
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      {item.image_url ? <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10">
-                          <Camera className="h-4 w-4 text-success" />
-                        </Button> : <Button variant="ghost" size="icon" className="text-muted-foreground h-9 w-9 sm:h-10 sm:w-10">
-                          <Camera className="h-4 w-4" />
-                        </Button>}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          if (item.image_url) window.open(item.image_url, '_blank', 'noopener');
+                          else openItemPhotoPicker(item.id);
+                        }}
+                        className={`h-9 w-9 sm:h-10 sm:w-10 ${item.image_url ? '' : 'text-muted-foreground'}`}
+                        aria-label={item.image_url ? 'הצג תמונה' : 'צרף תמונה'}
+                        title={item.image_url ? 'הצג תמונה' : 'צרף תמונה'}
+                      >
+                        <Camera className={`h-4 w-4 ${item.image_url ? 'text-success' : ''}`} />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => {
                     setDeletingItemId(item.id);
                     setShowDeleteDialog(true);
@@ -722,6 +770,15 @@ export default function ApartmentDetail() {
           capture="environment"
           className="hidden"
           onChange={handleImageCapture}
+        />
+        {/* Hidden input for the per-item Camera icon (attach photo to existing item). */}
+        <input
+          ref={itemPhotoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={attachPhotoToItem}
         />
       </div>
 
