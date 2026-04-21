@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { useUndoStack } from '@/hooks/use-undo-stack';
+import { UndoFlyout } from '@/components/UndoFlyout';
 
 // ---------- image helpers (scan flow) ------------------------------------
 // Resize to `maxLongSide` and encode as JPEG at `quality`. Keeps payloads
@@ -105,6 +107,7 @@ export default function ApartmentDetail() {
   const audioChunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
+  const { batch: undoBatch, push: pushUndo, dismiss: dismissUndo } = useUndoStack({ windowMs: 5000 });
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -266,13 +269,15 @@ export default function ApartmentDetail() {
         created_by_user_id: user.id
       }));
       
-      const { error } = await supabase.from('items').insert(itemsToInsert);
+      const { data: inserted, error } = await supabase
+        .from('items')
+        .insert(itemsToInsert)
+        .select('id');
       if (error) throw error;
-      
-      // Show success with item count
-      toast.success(`${itemsToAdd.length} פריטים נוספו בהצלחה`);
-      
-      // Reload and reset state
+      pushUndo((inserted ?? []).map((r: any) => r.id));
+
+      // Reload and reset state (the undo flyout replaces the success toast
+      // for auto-inserts, so users can undo rather than just being told).
       await loadData();
       setProcessing(false);
       setRecording(false);
@@ -321,11 +326,12 @@ export default function ApartmentDetail() {
         material_category: item.material_category as any,
         created_by_user_id: user.id
       }));
-      const {
-        error: insertError
-      } = await supabase.from('items').insert(itemsToInsert);
+      const { data: inserted, error: insertError } = await supabase
+        .from('items')
+        .insert(itemsToInsert)
+        .select('id');
       if (insertError) throw insertError;
-      toast.success(`${data.items.length} פריטים נוספו בהצלחה`);
+      pushUndo((inserted ?? []).map((r: any) => r.id));
       setShowManualDialog(false);
       setManualItem({
         description: ''
@@ -379,7 +385,7 @@ export default function ApartmentDetail() {
       const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
 
       // Insert the item with AI-derived fields + photo URL.
-      const { error: insertError } = await supabase.from('items').insert({
+      const { data: insertedRows, error: insertError } = await supabase.from('items').insert({
         project_id: projectId,
         apartment_id: apartmentId,
         description: parsed.description,
@@ -394,19 +400,56 @@ export default function ApartmentDetail() {
         source: 'image' as any,
         image_url: publicUrl.publicUrl,
         created_by_user_id: user.id,
-      } as any);
+      } as any).select('id');
       if (insertError) throw insertError;
+      pushUndo((insertedRows ?? []).map((r: any) => r.id));
 
       const lowConf = (parsed.ai_confidence ?? 1) < 0.6;
-      toast.success(
-        lowConf ? 'פריט נוסף — מומלץ לאמת תיאור' : `פריט נוסף · ${parsed.description}`,
-      );
+      if (lowConf) toast.message('פריט נוסף — מומלץ לאמת תיאור');
       await loadData();
     } catch (err: any) {
       console.error('scan failed:', err);
       toast.error(err?.message ? `שגיאה בסריקה: ${err.message}` : 'שגיאה בסריקה');
     } finally {
       setScanning(false);
+    }
+  };
+  // Undo handler — deletes the ids in the active batch, skipping any
+  // items already marked collected (the worker has confirmed those; we
+  // never want to silently revert a confirmation).
+  const handleUndoBatch = async () => {
+    const snapshot = dismissUndo();
+    if (!snapshot || snapshot.ids.length === 0) return;
+    try {
+      const { data: rows } = await supabase
+        .from('items')
+        .select('id, collected, image_url')
+        .in('id', snapshot.ids);
+      const safe = (rows ?? []).filter((r: any) => !r.collected).map((r: any) => r.id);
+      const skipped = snapshot.ids.length - safe.length;
+      if (safe.length === 0) {
+        toast.message('לא ניתן לבטל: כל הפריטים כבר סומנו כנאספו');
+        return;
+      }
+      const { error } = await supabase.from('items').delete().in('id', safe);
+      if (error) throw error;
+      // Best-effort: clean up the orphaned storage objects too.
+      const photoPaths = (rows ?? [])
+        .filter((r: any) => safe.includes(r.id) && typeof r.image_url === 'string' && r.image_url.includes('/item-photos/'))
+        .map((r: any) => r.image_url.split('/item-photos/')[1])
+        .filter(Boolean);
+      if (photoPaths.length > 0) {
+        await supabase.storage.from('item-photos').remove(photoPaths);
+      }
+      toast.success(
+        skipped > 0
+          ? `${safe.length} פריטים הוסרו · ${skipped} נשמרו (נאספו)`
+          : `${safe.length} פריטים הוסרו`,
+      );
+      await loadData();
+    } catch (err: any) {
+      console.error('undo failed:', err);
+      toast.error('שגיאה בביטול הפעולה');
     }
   };
   const updateItem = async (itemId: string, updates: Partial<Item>) => {
@@ -681,6 +724,14 @@ export default function ApartmentDetail() {
           onChange={handleImageCapture}
         />
       </div>
+
+      {/* Gmail-style undo flyout — appears for 5s after every auto-insert batch. */}
+      <UndoFlyout
+        count={undoBatch ? undoBatch.ids.length : null}
+        expiresAt={undoBatch ? undoBatch.expiresAt : null}
+        onUndo={handleUndoBatch}
+        onDismiss={() => dismissUndo()}
+      />
 
 
       {/* Edit Item Dialog */}
