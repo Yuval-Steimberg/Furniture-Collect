@@ -213,24 +213,50 @@ export default function Projects() {
   const activeProjects = projects.filter(p => !p.archived);
   const archivedProjects = projects.filter(p => p.archived);
 
-  const renderProjectCard = (project: Project) => (
-    <Card 
-      key={project.id} 
-      className="cursor-pointer hover:shadow-lg transition-shadow relative"
-      onClick={() => navigate(`/projects/${project.id}`)}
-      dir="rtl"
-    >
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-start justify-between gap-2">
-          <span className="line-clamp-2 text-right">{project.name}</span>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {project.archived && (
-              <Badge variant="secondary" className="text-xs">ארכיון</Badge>
-            )}
+  const renderProjectCard = (project: Project) => {
+    const aptProgress = project.apartment_count > 0
+      ? (project.completed_count! / project.apartment_count) * 100
+      : 0;
+    const itemsTotal = project.items_to_collect ?? 0;
+    const itemsDone  = project.items_collected ?? 0;
+    const itemProgress = itemsTotal > 0 ? (itemsDone / itemsTotal) * 100 : 0;
+    const status = project.archived
+      ? { label: 'ארכיון', cls: 'bg-muted text-muted-foreground' }
+      : aptProgress === 100 && project.apartment_count > 0
+        ? { label: 'הושלם', cls: 'bg-accent text-accent-foreground' }
+        : project.apartment_count > 0
+          ? { label: 'פעיל', cls: 'bg-primary/10 text-primary' }
+          : { label: 'חדש', cls: 'bg-secondary text-secondary-foreground' };
+
+    return (
+      <div
+        key={project.id}
+        onClick={() => navigate(`/projects/${project.id}`)}
+        className="group cursor-pointer rounded-xl border border-border bg-card hover:shadow-md transition-all overflow-hidden active:scale-[0.99]"
+        dir="rtl"
+        role="button"
+        tabIndex={0}
+      >
+        {/* Decorative cream-to-sage gradient strip at the top */}
+        <div className="h-1.5 w-full bg-gradient-to-r from-accent via-secondary to-muted" />
+
+        <div className="p-4 sm:p-5">
+          {/* Title + status + kebab */}
+          <div className="flex items-start gap-2 mb-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-full ${status.cls}`}>
+                  {status.label}
+                </span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+                {project.name}
+              </h3>
+            </div>
             {(profile?.org_role === 'ORG_ADMIN' || profile?.org_role === 'PROJECT_MANAGER') && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0 -mt-1">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -239,16 +265,12 @@ export default function Projects() {
                     <Edit2 className="h-4 w-4" />
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={(e) => toggleArchive(project, e as any)} className="justify-center px-3">
-                    {project.archived ? (
-                      <ArchiveRestore className="h-4 w-4" />
-                    ) : (
-                      <Archive className="h-4 w-4" />
-                    )}
+                    {project.archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
                   </DropdownMenuItem>
                   {profile?.org_role === 'ORG_ADMIN' && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         onClick={(e) => openDeleteDialog(project, e as any)}
                         className="text-destructive focus:text-destructive justify-center px-3"
                       >
@@ -260,60 +282,65 @@ export default function Projects() {
               </DropdownMenu>
             )}
           </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <MapPin className="h-4 w-4 flex-shrink-0" />
-          <span>{project.city}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <User className="h-4 w-4 flex-shrink-0" />
-          <span>{project.developer_name}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Calendar className="h-4 w-4 flex-shrink-0" />
-          <span>{new Date(project.start_date).toLocaleDateString('he-IL')}</span>
-        </div>
-        <div className="pt-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">דירות</span>
-            <Badge variant="outline">
-              {project.completed_count} / {project.apartment_count}
-            </Badge>
+
+          {/* Meta — city, developer, date in a tight row */}
+          <div className="text-xs sm:text-sm text-muted-foreground space-y-1 mb-4">
+            <div className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} />
+              <span className="truncate">{project.city}</span>
+              <span>·</span>
+              <User className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} />
+              <span className="truncate">{project.developer_name}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} />
+              <span>{new Date(project.start_date).toLocaleDateString('he-IL')}</span>
+            </div>
           </div>
-          {project.apartment_count > 0 && (
+
+          {/* Progress bars — apartments + items */}
+          <div className="space-y-2.5 mb-4">
             <div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-success transition-all"
-                  style={{ width: `${(project.completed_count! / project.apartment_count) * 100}%` }}
-                />
+              <div className="flex justify-between items-baseline mb-1">
+                <span className="text-xs text-muted-foreground">דירות</span>
+                <span className="text-xs font-bold tabular-nums">{project.completed_count}/{project.apartment_count}</span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-accent-foreground/70 transition-all" style={{ width: `${aptProgress}%` }} />
               </div>
             </div>
-          )}
-          {project.items_to_collect !== undefined && project.items_to_collect > 0 && (
-            <>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">פריטים לאיסוף</span>
-                <Badge variant="secondary">
-                  {project.items_collected} / {project.items_to_collect}
-                </Badge>
-              </div>
+            {itemsTotal > 0 && (
               <div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary transition-all"
-                    style={{ width: `${(project.items_collected! / project.items_to_collect) * 100}%` }}
-                  />
+                <div className="flex justify-between items-baseline mb-1">
+                  <span className="text-xs text-muted-foreground">פריטים לאיסוף</span>
+                  <span className="text-xs font-bold tabular-nums">{itemsDone}/{itemsTotal}</span>
+                </div>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${itemProgress}%` }} />
                 </div>
               </div>
-            </>
-          )}
+            )}
+          </div>
+
+          {/* Hero stat row */}
+          <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
+            <div className="text-center">
+              <div className="text-base sm:text-lg font-extrabold text-foreground tabular-nums">{project.apartment_count}</div>
+              <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">דירות</div>
+            </div>
+            <div className="text-center">
+              <div className="text-base sm:text-lg font-extrabold text-foreground tabular-nums">{itemsTotal}</div>
+              <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">פריטים</div>
+            </div>
+            <div className="text-center">
+              <div className="text-base sm:text-lg font-extrabold text-primary tabular-nums">{itemsDone}</div>
+              <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">נאספו</div>
+            </div>
+          </div>
         </div>
-      </CardContent>
-    </Card>
-  );
+      </div>
+    );
+  };
 
   const renderProjectRow = (project: Project) => (
     <Card 
