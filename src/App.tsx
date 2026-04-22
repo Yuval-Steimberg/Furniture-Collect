@@ -2,8 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { AppLayout } from "@/components/AppLayout";
+import { PageTransition } from "@/components/PageTransition";
 import { SetupScreen } from "@/components/SetupScreen";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import Auth from "./pages/Auth";
@@ -23,6 +25,34 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Routes wrapped in AnimatePresence so each navigation fades the exiting
+// page and animates the new one in. Keyed by pathname so sibling routes
+// trigger the animation; sub-routes of the same pattern re-use the same
+// tree (no unnecessary remount).
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<AppLayout><PageTransition><Dashboard /></PageTransition></AppLayout>} />
+        <Route path="/auth" element={<PageTransition><Auth /></PageTransition>} />
+        <Route path="/accept-invitation" element={<PageTransition><AcceptInvitation /></PageTransition>} />
+        <Route path="/projects" element={<AppLayout><PageTransition><Projects /></PageTransition></AppLayout>} />
+        <Route path="/projects/new" element={<AppLayout><PageTransition><NewProject /></PageTransition></AppLayout>} />
+        <Route path="/projects/:projectId" element={<AppLayout><PageTransition><ProjectDetail /></PageTransition></AppLayout>} />
+        <Route path="/projects/:projectId/apartments/new" element={<AppLayout><PageTransition><NewApartment /></PageTransition></AppLayout>} />
+        <Route path="/projects/:projectId/apartments/:apartmentId" element={<AppLayout><PageTransition><ApartmentDetail /></PageTransition></AppLayout>} />
+        <Route path="/projects/:projectId/statistics" element={<AppLayout><PageTransition><Statistics /></PageTransition></AppLayout>} />
+        <Route path="/projects/:projectId/report" element={<PageTransition><SustainabilityReport /></PageTransition>} />
+        <Route path="/projects/:projectId/users" element={<AppLayout><PageTransition><ProjectUsers /></PageTransition></AppLayout>} />
+        <Route path="/global-statistics" element={<AppLayout><PageTransition><GlobalStatistics /></PageTransition></AppLayout>} />
+        <Route path="/user-management" element={<AppLayout><PageTransition><UserManagement /></PageTransition></AppLayout>} />
+        <Route path="*" element={<AppLayout><PageTransition><NotFound /></PageTransition></AppLayout>} />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
 const App = () => {
   // Short-circuit to a friendly setup screen if env is missing — avoids
   // a white-screen crash when the Supabase client stub is used.
@@ -35,22 +65,7 @@ const App = () => {
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/accept-invitation" element={<AcceptInvitation />} />
-          <Route path="/projects" element={<AppLayout><Projects /></AppLayout>} />
-          <Route path="/projects/new" element={<AppLayout><NewProject /></AppLayout>} />
-          <Route path="/projects/:projectId" element={<AppLayout><ProjectDetail /></AppLayout>} />
-          <Route path="/projects/:projectId/apartments/new" element={<AppLayout><NewApartment /></AppLayout>} />
-          <Route path="/projects/:projectId/apartments/:apartmentId" element={<AppLayout><ApartmentDetail /></AppLayout>} />
-          <Route path="/projects/:projectId/statistics" element={<AppLayout><Statistics /></AppLayout>} />
-          <Route path="/projects/:projectId/report" element={<SustainabilityReport />} />
-          <Route path="/projects/:projectId/users" element={<AppLayout><ProjectUsers /></AppLayout>} />
-          <Route path="/global-statistics" element={<AppLayout><GlobalStatistics /></AppLayout>} />
-          <Route path="/user-management" element={<AppLayout><UserManagement /></AppLayout>} />
-          <Route path="*" element={<AppLayout><NotFound /></AppLayout>} />
-        </Routes>
+        <AnimatedRoutes />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

@@ -16,6 +16,7 @@ import { UndoFlyout } from '@/components/UndoFlyout';
 import { Lightbox } from '@/components/Lightbox';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonItemRow } from '@/components/SkeletonCard';
+import { SwipeableRow } from '@/components/SwipeableRow';
 
 // ---------- image helpers (scan flow) ------------------------------------
 // Resize to `maxLongSide` and encode as JPEG at `quality`. Keeps payloads
@@ -1026,8 +1027,14 @@ export default function ApartmentDetail() {
               {!isCollapsed && (
                 <div className="space-y-2 sm:space-y-3">
                   {locItems.map(item => (
-                    <Card
+                    <SwipeableRow
                       key={item.id}
+                      disabled={bulkMode}
+                      collected={item.collected}
+                      onDelete={() => { setDeletingItemId(item.id); setShowDeleteDialog(true); }}
+                      onToggleCollected={() => updateItem(item.id, { collected: !item.collected })}
+                    >
+                    <Card
                       className={`w-full transition-all ${bulkSelected.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
                       onClick={bulkMode ? () => toggleBulk(item.id) : undefined}
                       role={bulkMode ? 'button' : undefined}
@@ -1141,7 +1148,9 @@ export default function ApartmentDetail() {
                   </div>
                 </div>
               </CardContent>
-            </Card>))}
+            </Card>
+                    </SwipeableRow>
+                  ))}
                 </div>
               )}
             </section>
