@@ -17,6 +17,7 @@ import { Lightbox } from '@/components/Lightbox';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonItemRow } from '@/components/SkeletonCard';
 import { SwipeableRow } from '@/components/SwipeableRow';
+import { GuidedWalkthrough } from '@/components/GuidedWalkthrough';
 
 // ---------- image helpers (scan flow) ------------------------------------
 // Resize to `maxLongSide` and encode as JPEG at `quality`. Keeps payloads
@@ -131,6 +132,7 @@ export default function ApartmentDetail() {
   // Bulk select + grouping UI
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [showGuided, setShowGuided] = useState(false);
   const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   useEffect(() => {
@@ -1196,6 +1198,18 @@ export default function ApartmentDetail() {
             )}
           </Button>
           <Button
+            onClick={() => setShowGuided(true)}
+            size="lg"
+            variant="outline"
+            disabled={recording || processing || scanning || roomScanning}
+            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
+            aria-label="סריקה מונחית — AI מלווה אותך חדר-אחרי-חדר"
+            title="סריקה מונחית חדר-חדר"
+          >
+            <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+            <span className="hidden sm:inline">מונחה</span>
+          </Button>
+          <Button
             onClick={openRoomPicker}
             size="lg"
             variant={roomScanning ? 'secondary' : 'outline'}
@@ -1301,6 +1315,19 @@ export default function ApartmentDetail() {
         expiresAt={undoBatch ? undoBatch.expiresAt : null}
         onUndo={handleUndoBatch}
         onDismiss={() => dismissUndo()}
+      />
+
+      {/* Voice-guided, room-by-room walkthrough */}
+      <GuidedWalkthrough
+        open={showGuided}
+        onClose={() => setShowGuided(false)}
+        projectId={projectId!}
+        apartmentId={apartmentId!}
+        apartmentInfo={apartmentInfo}
+        onInserted={async (ids) => {
+          pushUndo(ids);
+          await loadData();
+        }}
       />
 
       {/* Full-screen swipable photo gallery */}

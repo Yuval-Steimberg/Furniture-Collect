@@ -1,4 +1,4 @@
-# Just A Second · Furniture Collect — What shipped in the last 24 hours
+# Just A Second · Furniture Collect — Full feature catalog
 
 > **Share link:** [github.com/Yuval-Steimberg/Furniture-Collect](https://github.com/Yuval-Steimberg/Furniture-Collect)
 > **Try it:** [furniture-collect.vercel.app](https://furniture-collect.vercel.app) — login: `Steimberg172@gmail.com` / `12345678`
@@ -7,189 +7,253 @@
 
 ## Executive summary
 
-We went from a Lovable-generated starter to a **production-deployed AI-powered evacuation inventory app** with 12 live edge functions, a full Just A Second brand system, a sustainability PDF export, and **nine AI features** powered by Claude Sonnet 4.5 + OpenAI Whisper.
+What started as a Lovable-generated starter is now a **production-deployed, AI-powered apartment-evacuation inventory app** with:
 
-The app is public at **furniture-collect.vercel.app**, works on phone and desktop, is Hebrew-first (RTL), and is ready to show to developer customers tomorrow.
+- 13 edge functions, all on Claude Sonnet 4.5 or OpenAI Whisper
+- Just A Second brand system (cream paper, forest headlines, sage accents, one confident orange)
+- 11 AI features covering intake, analysis, customer communications, and reporting
+- Native-app-feel UX: page transitions, swipe-to-delete, bulk select, grouped items, photo lightbox
+- Sustainability PDF report per project
+- Fully mobile-first, Hebrew RTL, phone-ready
 
----
-
-## 🎨 The Just A Second design system — applied everywhere
-
-- Cream paper background (`#FFFCF5`) — no more generic white.
-- Forest (`#333D36`) page headers and sidebar.
-- One confident orange (`#E88225`) — reserved exclusively for the primary CTA on each screen.
-- Sage (`#B5C9AD`) accents, supportive surfaces, and AI chips.
-- Hebrew-first RTL with **Heebo** body + **Bowlby One SC** display.
-- Warm, paper-light shadows — no Material drop shadows anywhere.
-- 14px generous corner radius; sage pill active tabs; no emoji.
-
-All 12 pages of the app respect these tokens. The entire visual language now matches Noa's brand guideline, not the Lovable construction-theme default.
+**Live at `furniture-collect.vercel.app`**. Ready to demo to a developer customer tomorrow.
 
 ---
 
-## 🤖 Nine AI features (9 edge functions, all live)
+## Eleven AI features
 
-### 1. Photo → Item (צלם) — Claude vision
-Point phone camera at a piece of furniture, tap shutter. Claude looks at the photo and creates a structured item with **Hebrew description**, **quantity**, **location**, **material**, **weight estimate**, **condition grade**, and a **confidence score**. Typical latency **~4 seconds**.
+### Data intake — pick the fastest path for any worker
 
-**Field test result:** scanning a generic office chair returned *"כיסא מודרני, פלסטיק שחור ורגלי עץ"*, material=plastic, weight=5 kg, condition=as_new, confidence=0.95.
+#### 1. Photo → single item (צלם · Claude vision)
+Point phone at a piece of furniture, tap shutter. Claude returns description in Hebrew, quantity, location (inferred from room context), item type, material, estimated weight, condition grade, and a confidence score. ~4 seconds.
 
-### 2. Voice → Items (הקלט פריטים) — Whisper + Claude
-Worker records themselves speaking Hebrew as they walk around an apartment. OpenAI Whisper transcribes; Claude parses into multiple structured items. Understands numbers (*"שלושה כיסאות"* → qty 3), locations (*"בסלון"*), and negation (*"לא לקחת"* → `intended_for_collection: false`).
+*Field result:* Scanning an office chair returned *"כיסא מודרני, פלסטיק שחור ורגלי עץ"*, weight 5 kg, condition as_new, confidence 0.95.
 
-### 3. Free-text → Items (ידני) — Claude
-Same pipeline, text input instead of audio. Useful when the worker is somewhere too quiet to record. Live-tested: parsed *"2 כסאות בסלון שולחן אוכל עץ 4 כיסאות במטבח מקרר לא לקחת"* into 4 correctly-structured items in 4.3 seconds.
+#### 2. Room sweep → many items (חדר · Claude vision)
+**Killer feature.** Photograph a whole room in one frame; Claude returns 6–12 separate items with locations, materials, weights, conditions. Modal lets the worker tick/untick before batch-insert. Cuts apartment documentation time ~70% versus item-by-item.
 
-### 4. Room sweep — one photo, many items
-**The killer feature.** Photograph a whole room in one frame; Claude returns 6–12 separate items with locations inferred from the room context. Worker sees a confirmation modal with checkboxes — uncheck wrong detections, confirm the rest, batch-insert.
+#### 3. Voice recording → items (הקלט פריטים · Whisper + Claude)
+Worker speaks Hebrew describing the room. OpenAI Whisper transcribes; Claude parses into structured items. Understands numbers (*"שלושה כיסאות"* = qty 3), locations (*"בסלון"*), negation (*"לא לקחת"* = don't collect).
 
-Cuts apartment documentation time by ~70% vs. item-by-item.
+#### 4. Voice-guided walkthrough (מונחה · stateful conversation) ⭐ NEW
+AI walks the worker through the apartment room by room. *"איפה אנחנו מתחילים?"* → worker answers → *"מה יש בסלון?"* → worker describes → AI extracts items, asks follow-ups, transitions to the next room. Quick-reply buttons let the worker tap instead of speaking when convenient. Items accumulate in a visible pending list; worker confirms all at the end with one tap.
 
-### 5. Resale value estimator
-In the edit dialog, tap **"הערכת שווי (AI)"**. Claude — given the description, material, condition, weight, and photo if present — estimates a resale value in ILS based on Israeli Yad2/Marketplace context. Stores it on the item, shows a sage `₪180` chip on the card. Feeds directly into the resale pipeline.
+Unique in the category — no other evacuation tool does a conversational survey. Acts as a coach for new workers and a time-saver for experienced ones.
 
-### 6. Duplicate detection (automatic)
-After **every** insert (voice/text/photo/room), the last 20 items in the same apartment are compared against each new addition. If Claude is ≥ 70% confident it's a clone, the item gets a red **כפילות** chip with the reason on hover. Prevents the same sofa from being recorded twice when two workers overlap.
+#### 5. Free-text → items (ידני · Claude)
+Same pipeline as voice, text input instead. Useful in quiet or no-signal environments. Live-tested: *"2 כסאות בסלון שולחן אוכל עץ 4 כיסאות במטבח מקרר לא לקחת"* parsed into 4 correct items in 4.3 seconds.
 
-### 7. Smart search — natural-language filter
-Search bar above the filter tabs. Type anything:
+#### 6. Per-item photo attach
+Small camera icon on each item row. No AI — just Supabase Storage upload + `image_url` update. Useful for adding a reference photo to a voice-captured item after the fact.
 
-- *"רהיטי עץ במצב טוב מעל 30 קילו"*
-- *"כל מה שלא נאסף בבניין 3"*
-- *"הפריטים הכי יקרים למכירה"*
+---
 
-Claude reads the items, returns matching IDs plus a one-line Hebrew explanation. Overlays with the existing status tabs (AND, not OR).
+### AI analysis over your data
 
-### 8. Sustainability report PDF — print-to-PDF per project
+#### 7. Resale value estimator (הערכת שווי · Claude + market context)
+In the edit dialog, one tap gives an ILS estimate with reasoning, calibrated to Israeli Yad2/Marketplace pricing. `scrap_only` → 0. Estimate stored on the row and shown as a sage `₪180` chip on the card.
+
+#### 8. Duplicate detection (automatic · Claude)
+After every insert, the last 20 items in the apartment are compared against each new addition. If Claude is ≥ 70% confident it's a clone, the item gets a red **כפילות** chip with the reason on hover. Keeps data clean when two workers overlap in the same building.
+
+#### 9. Smart search — natural-language filter (Claude)
+Free Hebrew query above the filter tabs. Type *"רהיטי עץ במצב טוב מעל 30 קילו"* or *"הפריטים הכי יקרים למכירה"* — Claude reads the items, returns matching IDs and a one-line explanation. Composes with status tabs (AND logic).
+
+#### 10. Stats Q&A — ask anything about aggregated data
+On the Global Statistics page, a Hebrew question box. Ask *"כמה CO2 נחסך סה"כ?"*, *"איזה פרויקט הכי יעיל?"*, *"אם הייתי אוסף את כל המקררים, כמה CO2 זה היה חוסך?"* — Claude reads the totals and answers in Hebrew. Useful in sales meetings when a developer asks something you didn't prepare a chart for.
+
+#### 11. AI Assistant drawer — persistent chat everywhere ⭐ NEW
+Floating sparkle button bottom-left of every logged-in page. Tap → a full-height drawer slides in with a Hebrew chat. Claude has live access to whatever you're looking at — an apartment, a project, or global totals — and grounds every answer in real data.
+
+Five quick-start prompts cover the most valuable tasks without typing:
+
+- **📝 סיכום לדירה** — professional Hebrew summary of the current apartment
+- **💰 מודעת Yad2** — 3 ready-to-post Israeli marketplace listings (title, description, price)
+- **🚚 סדר איסוף חכם** — item ranking for pickup truck by value × weight × logistics
+- **✉️ WhatsApp ליזם** — drafted customer status message with real numbers
+- **🔍 מה חסר?** — completeness check against typical apartment inventory
+
+Open-ended chat also works — ask anything in Hebrew.
+
+---
+
+### Reporting
+
+#### Sustainability PDF per project (דוח קיימות)
 Tap **"דוח קיימות"** on any project. A full-page cream-paper report opens with:
 
-- **Cover** — hero stats (kg diverted, CO₂-eq avoided, apartments documented, total items)
-- **Material breakdown** — sage-bar chart + table with UK DEFRA/EPA CO₂ factors per material
-- **Per-apartment summary table**
-- **Photo log** — up to 30 item photos
+- **Cover** — hero stats: kg diverted from landfill, CO₂-eq avoided, apartments documented, total items
+- **Material breakdown** — sage bar chart + table with UK DEFRA/EPA CO₂ factors per material
+- **Per-apartment summary** — building / apartment / status / items / collected / weight / CO₂
+- **Photo log** — up to 30 thumbnails with descriptions
 - **Certification block** — signed on behalf of Just A Second
 
-Tap **הדפס / PDF** → browser's native Save-as-PDF → shareable JAS-branded PDF. No external PDF library bundled.
+Browser's native "Save as PDF" produces a shareable JAS-branded document. No external PDF library bundled.
 
-**This is the artifact a developer customer pays for.** Hand this to a municipality and you have ESG compliance evidence.
-
-### 9. Stats Q&A on data (שאל שאלה)
-On the Global Statistics page, there's a Hebrew question box. Ask in plain language:
-
-- *"כמה CO2 נחסך סה"כ?"*
-- *"איזה פרויקט הכי יעיל במיחזור?"*
-- *"אם הייתי אוסף את כל המקררים, כמה CO2 זה היה חוסך?"*
-
-Claude reads the aggregated stats and answers in Hebrew. Unlike a fixed dashboard, this works for questions nobody planned for — useful in sales meetings when a developer asks something ad hoc.
+**This is the artifact a developer customer pays for.** Hand it to a municipality and you have ESG compliance evidence.
 
 ---
 
-## ✨ UX polish features (non-AI)
+## UX and brand
 
-### 10. Per-item photo attach
-The small 📷 icon in each item row now works. Tap it → if the item has a photo, it opens full-size; if not, the camera opens so you can add one. No AI — just plain upload + thumbnail.
+### Just A Second design system (applied throughout)
+- Cream paper background `#FFFCF5` — never pure white on large areas
+- Forest `#333D36` headers, sidebars, and hero panels
+- One confident orange `#E88225` — reserved for the primary CTA on each screen
+- Sage `#B5C9AD` for supportive surfaces, success states, AI badges
+- Warm terracotta `#B5452C` for destructive actions only
+- Paper-light warm shadows — no Material drops
+- 14-px generous corner radii, sage pill active tabs
+- Hebrew-first RTL throughout, **Heebo** body + **Bowlby One SC** display
+- Lucide icons at stroke 1.75 per the brand guide
+- No emoji in UI
 
-### 11. Gmail-style undo flyout
-After any batch auto-insert, a *"5 פריטים נוספו · [בטל]"* bar appears at the bottom for 5 seconds. One tap reverts the whole batch (skipping items already marked collected — we never silently revert a worker's confirmation). Follow-up inserts extend the same window rather than stacking flyouts.
+### Dashboard (the new landing page)
+- Time-aware greeting (בוקר טוב / צהריים טובים / ערב טוב) with first-name personalization
+- Hero tagline showing your impact (e.g. *"70 ק"ג הוצלו מהטמנה"*)
+- Three quick-action tiles with mixed JAS accents
+- Four hero stat cards — kg diverted, CO₂-eq avoided, apartments, items
+- Project previews with mini-stat rows (dirot / pritim / kg)
+- Recent activity feed — last 6 items across all projects with thumbnails and AI chips
 
-### 12. AI confidence chips
-Items that Claude was less than 60% sure about get a muted **"יש לאמת"** chip reminding the worker to review. AI-sourced items show a sage **AI** chip with a sparkles icon so you can instantly tell what came from the model vs. manual entry.
+### Projects page — dashboard grid
+Each card is a premium tile with:
+- Decorative gradient strip on top (cream → sage → muted)
+- Status pill: פעיל / הושלם / ארכיון / חדש — color-coded
+- Bold title that shifts to orange on hover
+- Compacted metadata row with Lucide icons
+- Dual progress bars (apartments calm sage, items CTA orange)
+- 3-column hero stat row at the bottom — *נאספו* is the only orange number
+- Fully keyboard-accessible, active:scale feedback
 
-### 13. Graceful setup screen
-If `.env` isn't configured the app shows a Hebrew setup walkthrough instead of a white-screen crash. Tells the new developer exactly which three Supabase values to paste and where to find them.
+### Project detail — tile-based apartment list
+- Collapsible by building with counts in the header
+- Apartment tiles with sage-ringed status icons, 2-line info, ArrowLeft slide on hover
+- Completed apartments get a soft sage background (not gray)
 
-### 14. SPA routing fixed on Vercel
-Deep links like `/projects/:id/report` now load correctly on refresh — previously returned 404 because Vercel treated them as static paths.
+### Apartment detail — the daily-use workhorse
+- **Items grouped by location** — collapsible `סלון (5 · 55 ק"ג)` sections with sticky headers
+- **Bulk-select mode** — header ✓ toggle; tap cards to select; sticky action bar with bulk collect / delete / exit
+- **Swipe-to-delete** — iOS-style: swipe right reveals red מחק, swipe left reveals sage נאסף, hard swipe past 180 px commits immediate delete. Vertical scroll still works. Auto-disables in bulk mode.
+- **Photo lightbox** — tap any thumbnail for full-screen swipable gallery with RTL-aware direction and keyboard arrows
+- **Smart search bar** — natural language filter (AI) above the filter tabs
+- **Filter tabs** — הכל / ממתין / רק תיעוד with live counts
+- **Per-item action bar** — edit / camera / delete icons plus intended-for-collection and collected switches
+- **AI badges** — *AI* sage chip on vision-sourced items; *יש לאמת* amber chip on confidence < 0.6; red *כפילות* chip for detected duplicates; sage *₪N* chip for resale estimates
+
+### Page transitions (app-wide)
+Every route navigation cross-fades and slightly slides (220 ms, JAS easing curve). Feels native, not web.
+
+### Skeleton loading, inviting empty states, actionable errors
+- No more "טוען..." text anywhere — shape placeholders while data arrives
+- Empty states use the new component: sage icon circle + title + primary/secondary CTAs
+- Mic permission errors now give specific Hebrew instructions per error type (denied, no device, device busy, HTTPS missing)
 
 ---
 
-## 🏗️ Under the hood
+## Under the hood
 
 ### Stack
-- **Frontend:** Vite + React 18 + TypeScript + shadcn/ui + Tailwind v3
-- **Design tokens:** CSS variables for all JAS colors, HSL-compatible with shadcn
+- **Frontend:** Vite + React 18 + TypeScript + shadcn/ui + Tailwind v3 + Framer Motion
 - **Backend:** Supabase (Postgres + Row-Level Security + Auth + Storage + Edge Functions)
-- **AI:** Claude Sonnet 4.5 (vision + text) via direct Anthropic Messages API · OpenAI Whisper for voice transcription
-- **Hosting:** Vercel (auto-deploy from GitHub main)
+- **AI:** Claude Sonnet 4.5 via direct Anthropic Messages API for vision + text · OpenAI Whisper for voice transcription
+- **Hosting:** Vercel (auto-deploy from GitHub main, commit-author-verified)
 
 ### Database
 13 migrations, fully RLS-secured. Headline tables:
 - `profiles` (org roles: ORG_ADMIN / PROJECT_MANAGER / WORKER)
 - `projects` · `user_projects` · `apartments` · `items`
-- New: `items.condition`, `items.ai_confidence`, `items.source`, `items.estimated_resale_ils`, `items.duplicate_of`
-- `item-photos` storage bucket for uploaded photos
+- `items` extensions: `condition`, `ai_confidence`, `source`, `estimated_resale_ils`, `duplicate_of`
+- `item-photos` storage bucket (public, 10 MB cap, JPEG/PNG/WebP)
 
-### Edge functions (all live on Supabase)
+### All 13 edge functions
 ```
-parse-image-item           photo → 1 structured item
-parse-room-image           photo → N structured items
-parse-voice-items          audio → transcription + items (or intent command)
-parse-text-items           text → items
-estimate-resale-value      item → ILS price estimate + rationale
-check-duplicate-item       new item + recent → is-duplicate + reason
-smart-search               NL query + items → matching ids + explanation
-ask-statistics-question    Q + stats → Hebrew answer
-calculate-statistics       per-project + global rollups
+parse-image-item           photo → 1 structured item (Claude vision)
+parse-room-image           photo → N items (Claude vision, multi-detect)
+parse-voice-items          audio → transcription + items (Whisper + Claude)
+parse-text-items           free text → items (Claude)
+estimate-resale-value      item → ILS price + rationale (Claude)
+check-duplicate-item       new item + recent → is-duplicate? (Claude)
+smart-search               NL query + items → matching ids (Claude)
+ask-statistics-question    Q + aggregated stats → Hebrew answer (Claude)
+ai-assistant               conversational assistant with data context (Claude)
+guided-walkthrough         stateful room-by-room documentation chat (Claude)
+calculate-statistics       per-project + global stat rollups
 send-invitation-email      team invites
 delete-user                admin user removal
 ```
 
-### Front-end new code
-- `src/lib/sustainability.ts` — canonical CO₂ factors, fallback weights, aggregation helpers (single source of truth for stats + PDF)
+### New frontend components
+- `src/components/AIAssistant.tsx` — floating chat drawer (340 lines)
+- `src/components/GuidedWalkthrough.tsx` — voice-guided room-by-room flow (290 lines)
+- `src/components/Lightbox.tsx` — full-screen swipable photo viewer
+- `src/components/SwipeableRow.tsx` — iOS-style horizontal swipe with dual actions
+- `src/components/PageTransition.tsx` — Framer Motion route wrapper
+- `src/components/StatCard.tsx` — hero metric card with 4 accents
+- `src/components/EmptyState.tsx` — inviting empty state
+- `src/components/SkeletonCard.tsx` — 3 loading-skeleton variants
+- `src/components/SetupScreen.tsx` — env-missing boot fallback
+- `src/components/UndoFlyout.tsx` + `src/hooks/use-undo-stack.ts` — Gmail-style undo bar
+- `src/lib/sustainability.ts` — canonical CO₂ factors + aggregation helpers
+
+### New frontend pages
+- `src/pages/Dashboard.tsx` — landing page
 - `src/pages/SustainabilityReport.tsx` — full-page print-ready report
-- `src/components/SetupScreen.tsx` — env-missing fallback
-- `src/components/UndoFlyout.tsx` + `src/hooks/use-undo-stack.ts` — undo bar
-- `src/pages/ApartmentDetail.tsx` — ~1100 lines of AI-feature wiring
 
 ---
 
-## 📱 How to demo for colleagues / customers
+## How to demo for a customer
 
 ### 3-minute demo flow
-1. Open `furniture-collect.vercel.app` on phone — login page loads with JAS branding.
-2. Log in → tap project → tap apartment.
-3. **Room sweep (ONE button, many items):** Tap **חדר** → shoot a wide photo of any cluttered space in the room → 6 seconds later a modal shows 8 detected items with checkboxes → tap "הוסף 8 פריטים" → they appear with AI chips.
-4. **Photo scan (ONE button, ONE item):** Tap **צלם** → take a photo of a specific chair → 4 seconds later the chair appears pre-filled with description in Hebrew, weight, material, condition.
-5. **Voice recording:** Tap orange Mic → say "ספה אפורה בסלון שולחן עץ ארבעה כיסאות מקרר לא לקחת" → stop → 5 items appear.
-6. **Smart search:** Type "רק פריטים מעל 20 קילו" → list narrows.
-7. **Sustainability report:** Back arrow → tap **דוח קיימות** on the project card → Print/PDF.
+1. `furniture-collect.vercel.app` on phone — login page loads in JAS branding.
+2. Log in → Dashboard shows live stats with time-aware greeting.
+3. Tap a project → redesigned cards with status pills + progress bars.
+4. Tap an apartment.
+5. Tap **מונחה** (guided walkthrough) → AI asks "איפה אנחנו מתחילים?" — demo the conversational flow by tapping a quick-reply button.
+6. Tap the sparkle button bottom-left → **AI Assistant** drawer opens.
+7. Tap **"סיכום לדירה"** → Claude reads the 19 items and writes a 2-3 sentence professional Hebrew summary in ~4 seconds.
+8. Try **"מודעת Yad2"** → 3 ready-to-post listings with prices.
+9. Back to the project card → tap **דוח קיימות** → full-page sustainability PDF ready to print / save.
 
-### For a developer/municipality customer
-Show step 7 first. The PDF is the output artifact — that's what they pay for. Everything else is how JAS produces it efficiently.
-
----
-
-## 🛣️ What's next on the roadmap
-
-- **Voice commands** — intent is already classified (`kind: command`). Need UI to dispatch ("mark all as collected", "generate report"). ~3h.
-- **Bulk resale estimate** — one-button price every item in a project. ~2h.
-- **Resale column in the sustainability report** — total project resale value. ~1h.
-- **Custom domain** — `collect.justasecond.co.il`. Needs DNS setup on Noa's side.
-- **Offline voice capture** — IndexedDB + service worker for workers in basements with no signal. ~6h.
-- **Pickup route scheduling** — group items into daily truck routes. Bigger feature.
-
-Full roadmap with specs: `docs/TRACKING.md` in this repo.
+### For a developer or municipality customer
+Show the **sustainability report** first. That's the output artifact they're paying for. Everything else is how JAS produces it efficiently.
 
 ---
 
-## 🔐 Credentials needed to run this elsewhere
+## What's next on the roadmap
 
-For a new environment you'd need:
-1. A **Supabase** project (free tier OK) — 3 env vars
-2. **ANTHROPIC_API_KEY** — ~$5 gets ~300 photo scans or 1000+ text parses
-3. **OPENAI_API_KEY** — only for Whisper voice transcription (~$0.006 per minute of audio)
+- **Code-splitting** — cut initial bundle from 374 KB to ~180 KB gzipped for faster first load on cellular
+- **Cmd+K command palette** — keyboard shortcut into the AI Assistant and navigation
+- **Sustainability report polish** — cover photo, resale-value column, shareable public link
+- **Bulk resale estimate** — one-button price-every-item in a project
+- **Custom domain** — `collect.justasecond.co.il` (needs DNS from you)
+
+---
+
+## Credentials needed to run this in a new environment
+
+1. A **Supabase** project (free tier OK) — three `VITE_SUPABASE_*` env vars
+2. **ANTHROPIC_API_KEY** (~$5 gets hundreds of photo/voice operations)
+3. **OPENAI_API_KEY** (Whisper only — ~$0.006 / minute of audio)
 4. A **GitHub** repo + **Vercel** project connected to it
 
-Everything else is code and configuration — the repo is self-contained.
+Everything else is code and Supabase migrations — the repo is self-contained.
 
 ---
 
-## Git history (last 24 hours)
+## Full git history (last 48 hours)
 
 ```
+de2a11d  Add AI Assistant: floating chat drawer with full data context
+f129d00  Fix swipe-to-delete: rewrite with useAnimationControls
+10501d5  Pro UX round 5: swipe-to-delete + smooth page transitions
+4ef7d02  Pro UX round 4: project-detail polish + actionable mic errors
+e41b9d8  Pro UX round 3: redesigned project cards
+84afd5e  Pro UX round 2: grouped items, bulk select, photo lightbox
+917b8d0  Pro-grade UX transform: dashboard, stat cards, skeletons, empty states
+bb5e94c  docs: add WHATS_NEW.md — 24-hour feature summary for colleagues
 7c13626  Add 5 new AI features: room sweep, resale, duplicates, smart search, voice commands
 550ab5f  Activate all remaining AI features + ship sustainability report
-08cfc1b  Ignore build artifacts
 4656d05  parse-image-item: call Anthropic Messages API directly
 3d91560  Make the per-item Camera icon actually do something
 235d026  Add Vercel SPA rewrite config
@@ -198,9 +262,10 @@ Everything else is code and configuration — the repo is self-contained.
 ed4d03c  Add camera + vision-autofill feature (photo → structured item)
 717627f  Add next-gen roadmap + feature specs
 b7f801a  Initial import with Just A Second design system
++ voice-guided walkthrough (this commit)
 ```
 
 ---
 
-*Document generated for colleague / customer sharing. Last updated 22.4.2026.*
+*Document generated for colleague and customer sharing.*
 *Questions? Yuval — Steimberg172@gmail.com*
