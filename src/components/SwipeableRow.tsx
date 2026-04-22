@@ -1,15 +1,21 @@
 // Swipeable row — iOS-style horizontal swipe reveals action buttons.
-// - Drag-in-either-direction supported (RTL-aware by default via the
-//   `direction` prop).
-// - Two action slots: `leading` (revealed by swipe toward start / right
-//   in LTR / left in RTL) and `trailing` (the opposite direction).
-// - Pass `collected` so the COLLECT action button can be hidden when
-//   the item is already done.
-// - Tap anywhere on the card content while the row is closed still
-//   fires the row's onClick if provided.
-import { AnimatePresence, motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
+// Uses useAnimationControls so the drag gesture and post-drag snap-back
+// never fight over the same motion value.
+//
+// Gestures:
+//   - swipe past 60px → snaps open exposing the action on that side
+//   - swipe past 180px → commits the destructive action immediately
+//   - tap anywhere while open → closes back to zero
+//   - vertical scroll still works (touch-action: pan-y)
+import {
+  motion,
+  useAnimationControls,
+  useMotionValue,
+  useTransform,
+  type PanInfo,
+} from 'framer-motion';
 import { Check, Trash2, Undo2 } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -17,13 +23,13 @@ interface Props {
   onToggleCollected?: () => void;
   collected?: boolean;
   disabled?: boolean;
-  /** Content direction — RTL means "swipe right" = trailing actions. */
+  /** RTL by default → swipe right = delete, swipe left = collect. */
   direction?: 'rtl' | 'ltr';
 }
 
-const THRESHOLD = 70;        // px to commit a reveal
-const TRAVEL    = 150;       // max exposure on each side
-const COMMIT    = 250;       // if dragged past this we treat as "delete now"
+const OPEN = 96;          // px — how far the card stays offset when revealed
+const REVEAL = 60;         // drag threshold to commit a reveal
+const COMMIT = 180;        // drag threshold for an instant destructive action
 
 export function SwipeableRow({
   children,
@@ -33,102 +39,121 @@ export function SwipeableRow({
   disabled = false,
   direction = 'rtl',
 }: Props) {
+  const controls = useAnimationControls();
   const x = useMotionValue(0);
-  const [offset, setOffset] = useState(0);
-  const ignoreNextTapRef = useRef(false);
+  const [revealed, setRevealed] = useState<'none' | 'left' | 'right'>('none');
+  const didDragRef = useRef(false);
 
-  // In RTL: positive x = drag to the right = reveal actions on the LEFT side.
-  // In LTR: positive x = drag to the right = reveal actions on the RIGHT side.
-  // For the trailing/leading labels, we use LTR semantics internally and flip
-  // at render time.
+  // Cancel any stuck open state if the row is un-mounted or disabled mid-action
+  useEffect(() => {
+    if (disabled) {
+      void controls.start({ x: 0 });
+      setRevealed('none');
+    }
+  }, [disabled, controls]);
+
+  // Background opacity ramps up as the card is pulled aside
+  const leftOpacity  = useTransform(x, [0, REVEAL, OPEN], [0, 0.6, 1]);
+  const rightOpacity = useTransform(x, [-OPEN, -REVEAL, 0], [1, 0.6, 0]);
+
+  const close = () => {
+    setRevealed('none');
+    void controls.start({ x: 0, transition: { type: 'spring', stiffness: 600, damping: 40 } });
+  };
+
   const onDragEnd = (_: unknown, info: PanInfo) => {
+    didDragRef.current = Math.abs(info.offset.x) > 4;
     const dx = info.offset.x;
-    if (Math.abs(dx) > COMMIT) {
-      // Hard commit — fire the delete action (strongest destructive swipe)
-      if (onDelete && Math.sign(dx) !== 0) {
-        ignoreNextTapRef.current = true;
-        onDelete();
+    const v  = info.velocity.x;
+
+    // Fast/far destructive swipe → commit delete if the delete side is exposed
+    if (onDelete) {
+      const isDeleteSide = direction === 'rtl' ? dx > 0 : dx < 0;
+      if (isDeleteSide && (Math.abs(dx) > COMMIT || Math.abs(v) > 800)) {
+        // animate off-screen then fire
+        void controls.start({ x: dx > 0 ? 400 : -400, transition: { duration: 0.18 } });
+        setTimeout(() => onDelete(), 180);
         return;
       }
     }
-    if (dx > THRESHOLD) {
-      setOffset(TRAVEL);
-    } else if (dx < -THRESHOLD) {
-      setOffset(-TRAVEL);
-    } else {
-      setOffset(0);
-    }
+
+    if (dx > REVEAL)  { setRevealed('left');  void controls.start({ x: OPEN,  transition: { type: 'spring', stiffness: 500, damping: 40 } }); return; }
+    if (dx < -REVEAL) { setRevealed('right'); void controls.start({ x: -OPEN, transition: { type: 'spring', stiffness: 500, damping: 40 } }); return; }
+    close();
   };
 
-  // Background opacity ramps up as the row is dragged
-  const leftOpacity  = useTransform(x, [0, THRESHOLD, TRAVEL], [0, 0.7, 1]);
-  const rightOpacity = useTransform(x, [-TRAVEL, -THRESHOLD, 0], [1, 0.7, 0]);
+  // In RTL, positive x (swipe right) exposes the left-edge area, which we
+  // label as the DELETE action. Swiping left exposes the right-edge, which is
+  // the COLLECT toggle.
+  const deleteSide  = direction === 'rtl' ? 'left' : 'right';
+  const collectSide = direction === 'rtl' ? 'right' : 'left';
 
-  // Reset offset if user taps outside the actions
-  const handleCardTap = () => {
-    if (offset !== 0) {
-      setOffset(0);
-      ignoreNextTapRef.current = true;
-    }
-  };
-
-  const deleteLabel = 'מחק';
-  const collectLabel = collected ? 'בטל איסוף' : 'נאסף';
-
-  if (disabled) {
-    return <div className="relative">{children}</div>;
-  }
-
-  const revealLeft  = direction === 'rtl'
-    // In RTL, "leading" (swipe right, positive x) reveals the DELETE action
-    // visually on the LEFT side of the card.
-    ? { style: { opacity: leftOpacity  }, icon: <Trash2 className="h-5 w-5" />, label: deleteLabel, bg: 'bg-destructive', textColor: 'text-destructive-foreground', action: onDelete }
-    : { style: { opacity: leftOpacity  }, icon: collected ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" />, label: collectLabel, bg: collected ? 'bg-muted' : 'bg-accent-foreground', textColor: collected ? 'text-foreground' : 'text-background', action: onToggleCollected };
-  const revealRight = direction === 'rtl'
-    ? { style: { opacity: rightOpacity }, icon: collected ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" />, label: collectLabel, bg: collected ? 'bg-muted' : 'bg-accent-foreground', textColor: collected ? 'text-foreground' : 'text-background', action: onToggleCollected }
-    : { style: { opacity: rightOpacity }, icon: <Trash2 className="h-5 w-5" />, label: deleteLabel, bg: 'bg-destructive', textColor: 'text-destructive-foreground', action: onDelete };
+  if (disabled) return <>{children}</>;
 
   return (
-    <div className="relative overflow-hidden rounded-lg">
-      {/* Action rails behind the card */}
+    <div className="relative overflow-hidden rounded-lg bg-muted">
+      {/* Left-edge action (delete in RTL) */}
       <motion.button
         type="button"
-        onClick={() => { setOffset(0); revealLeft.action?.(); }}
-        style={revealLeft.style}
-        className={`absolute inset-y-0 right-0 ${revealLeft.bg} ${revealLeft.textColor} flex items-center justify-center gap-2 px-5 font-semibold z-0`}
+        onClick={(e) => {
+          e.stopPropagation();
+          close();
+          onDelete?.();
+        }}
+        style={{ opacity: deleteSide === 'left' ? leftOpacity : rightOpacity }}
+        className={`absolute inset-y-0 left-0 flex items-center justify-center gap-2 px-5 z-0 pointer-events-auto
+          bg-destructive text-destructive-foreground font-semibold`}
+        aria-hidden={revealed === 'none'}
+        tabIndex={revealed === 'right' ? 0 : -1}
       >
-        {revealLeft.icon}
-        <span className="text-sm">{revealLeft.label}</span>
-      </motion.button>
-      <motion.button
-        type="button"
-        onClick={() => { setOffset(0); revealRight.action?.(); }}
-        style={revealRight.style}
-        className={`absolute inset-y-0 left-0 ${revealRight.bg} ${revealRight.textColor} flex items-center justify-center gap-2 px-5 font-semibold z-0`}
-      >
-        {revealRight.icon}
-        <span className="text-sm">{revealRight.label}</span>
+        <Trash2 className="h-5 w-5" />
+        <span className="text-sm">מחק</span>
       </motion.button>
 
-      {/* The card itself — drag-able */}
+      {/* Right-edge action (collect toggle in RTL) */}
+      <motion.button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          close();
+          onToggleCollected?.();
+        }}
+        style={{ opacity: collectSide === 'right' ? rightOpacity : leftOpacity }}
+        className={`absolute inset-y-0 right-0 flex items-center justify-center gap-2 px-5 z-0 pointer-events-auto
+          ${collected ? 'bg-muted text-foreground' : 'bg-accent-foreground text-background'} font-semibold`}
+        aria-hidden={revealed === 'none'}
+        tabIndex={revealed === 'left' ? 0 : -1}
+      >
+        {collected ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" />}
+        <span className="text-sm">{collected ? 'בטל איסוף' : 'נאסף'}</span>
+      </motion.button>
+
+      {/* Draggable card */}
       <motion.div
         drag="x"
-        dragConstraints={{ left: -TRAVEL, right: TRAVEL }}
-        dragElastic={0.15}
-        style={{ x, touchAction: 'pan-y' }}
-        animate={{ x: offset }}
-        transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+        dragConstraints={{ left: -OPEN, right: OPEN }}
+        dragElastic={0.18}
+        dragMomentum={false}
+        onDragStart={() => { didDragRef.current = true; }}
         onDragEnd={onDragEnd}
-        onClickCapture={e => {
-          if (ignoreNextTapRef.current) {
+        animate={controls}
+        style={{ x, touchAction: 'pan-y' }}
+        onClickCapture={(e) => {
+          // If the card is open, a tap should close it (not propagate to Card onClick)
+          if (revealed !== 'none') {
             e.preventDefault();
             e.stopPropagation();
-            ignoreNextTapRef.current = false;
-          } else if (offset !== 0) {
-            handleCardTap();
+            close();
+            return;
+          }
+          // If a drag just happened, swallow the click so we don't open the edit dialog etc.
+          if (didDragRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            didDragRef.current = false;
           }
         }}
-        className="relative z-10 bg-card"
+        className="relative z-10 bg-card rounded-lg"
       >
         {children}
       </motion.div>
