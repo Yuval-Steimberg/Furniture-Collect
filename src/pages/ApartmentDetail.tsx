@@ -215,9 +215,24 @@ export default function ApartmentDetail() {
         
         mediaRecorder.start();
         setRecording(true);
-      } catch (error) {
-        toast.error('לא ניתן לגשת למיקרופון');
-        console.error(error);
+      } catch (error: any) {
+        console.error('mic error:', error);
+        // Diagnose specific mic failures and give actionable Hebrew guidance.
+        const name = error?.name ?? '';
+        let title = 'לא ניתן לגשת למיקרופון';
+        let description = '';
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          description = 'הדפדפן חוסם את המיקרופון. פתח הגדרות האתר (סמל המנעול ליד הכתובת) → הרשה מיקרופון → רענן את הדף.';
+        } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          description = 'לא נמצא מיקרופון במכשיר. ודא שחיבר מיקרופון או השתמש בכפתור ״ידני״ במקום.';
+        } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+          description = 'אפליקציה אחרת משתמשת במיקרופון. סגור אותה ונסה שוב.';
+        } else if (name === 'SecurityError' || !window.isSecureContext) {
+          description = 'הדפדפן מחייב חיבור מאובטח (HTTPS) כדי להפעיל את המיקרופון.';
+        } else {
+          description = 'אפשר להוסיף פריטים עם כפתור "ידני" או "צלם" במקום ההקלטה.';
+        }
+        toast.error(title, { description, duration: 7000 });
       }
     }
   };

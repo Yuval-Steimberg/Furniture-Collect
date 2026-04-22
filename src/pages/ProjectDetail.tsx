@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package } from 'lucide-react';
+import { EmptyState } from '@/components/EmptyState';
+import { SkeletonProjectCard } from '@/components/SkeletonCard';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -157,11 +159,30 @@ export default function ProjectDetail() {
   const totalPending = buildings.reduce((s, b) => s + b.pendingForCollection, 0);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">טוען...</div>;
+    return (
+      <div className="min-h-screen bg-muted" dir="rtl">
+        <div className="h-16 bg-sidebar" />
+        <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4">
+          <div className="h-10 w-56 bg-muted-foreground/10 rounded animate-pulse" />
+          <SkeletonProjectCard />
+          <SkeletonProjectCard />
+        </div>
+      </div>
+    );
   }
 
   if (!project) {
-    return <div className="min-h-screen flex items-center justify-center">פרויקט לא נמצא</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted p-6" dir="rtl">
+        <EmptyState
+          icon={Building2}
+          title="פרויקט לא נמצא"
+          description="יתכן שהפרויקט נמחק או שאין לך הרשאה לצפות בו."
+          actionLabel="חזרה לפרויקטים שלי"
+          onAction={() => navigate('/projects')}
+        />
+      </div>
+    );
   }
 
   return (
@@ -244,11 +265,16 @@ export default function ProjectDetail() {
 
         {filteredBuildings.length === 0 ? (
           <Card>
-            <CardContent className="py-12 text-center">
-              <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">
-                {buildings.length === 0 ? 'אין דירות בפרויקט' : 'אין דירות התואמות לסינון'}
-              </p>
+            <CardContent className="p-0">
+              <EmptyState
+                icon={Building2}
+                title={buildings.length === 0 ? 'אין דירות בפרויקט' : 'אין תוצאות לסינון'}
+                description={buildings.length === 0
+                  ? 'הוסף את הבניין הראשון כדי להתחיל לתעד דירות בפינוי.'
+                  : 'נסה לשנות את הסינון.'}
+                actionLabel={buildings.length === 0 ? 'הוסף בניין' : undefined}
+                onAction={buildings.length === 0 ? () => navigate(`/projects/${projectId}/apartments/new`) : undefined}
+              />
             </CardContent>
           </Card>
         ) : (
@@ -317,34 +343,49 @@ export default function ProjectDetail() {
                         {building.apartments.map((apartment, aIdx) => {
                           const done = isApartmentDone(apartment);
                           return (
-                            <Card
+                            <button
                               key={apartment.id}
+                              type="button"
                               className={cn(
-                                "cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-scale-in",
-                                done && "bg-muted/60 opacity-80"
+                                "w-full text-right rounded-lg border border-border bg-card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-scale-in group",
+                                "focus:outline-none focus:ring-2 focus:ring-primary/40",
+                                done && "bg-accent/20 border-accent"
                               )}
                               style={{ animationDelay: `${aIdx * 30}ms` }}
                               onClick={() => navigate(`/projects/${projectId}/apartments/${apartment.id}`)}
                             >
-                              <CardContent className="p-3">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    {done && (
-                                      <div className="flex-shrink-0 h-6 w-6 rounded-full bg-success/20 flex items-center justify-center">
-                                        <Check className="h-3.5 w-3.5 text-success" />
-                                      </div>
-                                    )}
-                                    <span className="font-semibold">דירה {apartment.apartment_number}</span>
-                                    {apartment.pendingForCollection > 0 && (
-                                      <Badge variant="outline" className="text-xs">
-                                        {apartment.pendingForCollection} לאיסוף
-                                      </Badge>
+                              <div className="p-3 sm:p-3.5 flex items-center gap-3">
+                                <div className={cn(
+                                  "flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center transition-colors",
+                                  done
+                                    ? "bg-accent text-accent-foreground"
+                                    : "bg-muted text-muted-foreground group-hover:bg-accent/50"
+                                )}>
+                                  {done
+                                    ? <Check className="h-5 w-5" strokeWidth={2.5} />
+                                    : <Home className="h-4 w-4" strokeWidth={1.75} />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="font-bold text-sm sm:text-base">דירה {apartment.apartment_number}</span>
+                                    {getStatusBadge(apartment.status)}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    {apartment.pendingForCollection > 0 ? (
+                                      <span className="inline-flex items-center gap-1">
+                                        <Package className="h-3 w-3" strokeWidth={1.75} />
+                                        {apartment.pendingForCollection} פריטים לאיסוף
+                                      </span>
+                                    ) : done ? (
+                                      <span>הושלם</span>
+                                    ) : (
+                                      <span>טרם תועד</span>
                                     )}
                                   </div>
-                                  {getStatusBadge(apartment.status)}
                                 </div>
-                              </CardContent>
-                            </Card>
+                                <ArrowLeft className="h-4 w-4 text-muted-foreground flex-shrink-0 group-hover:text-foreground group-hover:-translate-x-0.5 transition-all" />
+                              </div>
+                            </button>
                           );
                         })}
                       </div>
