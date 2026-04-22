@@ -35,29 +35,10 @@ interface ParsedImageItem {
   detected_labels: string[];
 }
 
-const VISION_PROMPT = `אתה מומחה תיעוד פריטים עבור "Just A Second" — ארגון
-ישראלי לפינוי דירות ושימוש חוזר ברהיטים.
-
-בהינתן תמונה של פריט ביתי יחיד, החזר אובייקט JSON לפי הסכמה. כללים:
-
-1. description: תיאור קצר בעברית (פחות מ-60 תווים). כולל חומר וצבע עיקריים אם
-   נראים בבירור. דוגמה: "ספה תלת-מושבית, בד אפור".
-2. quantity: 1, אלא אם התמונה מראה בבירור כמה פריטים זהים.
-3. location: הסק מהרקע (סלון / מטבח / חדר שינה / מרפסת / שירותים). מחרוזת ריקה
-   אם לא ברור.
-4. intended_for_collection: true אם הפריט במצב שמאפשר שימוש חוזר. false אם
-   שבור חמור / לא בטוח.
-5. item_type: furniture / appliance / textile / small_item / other.
-6. material_category: glass / aluminum / wood / plastic / metal / textile /
-   electrical / other — החומר הדומיננטי.
-7. estimated_weight_kg: מספר שלם. השתמש בממוצעים סבירים: ספה ~45, כיסא אוכל ~6,
-   מזרן ~25, מקרר ~70, מנורת שולחן ~2, שולחן אוכל ~35, ארון בגדים ~50.
-8. condition: as_new / good / needs_repair / scrap_only — לפי בלאי, נזק,
-   כתמים, בעיות מבניות שנראים בתמונה.
-9. ai_confidence: בין 0.0 ל-1.0 — עד כמה אתה בטוח בתיאור הכולל.
-10. detected_labels: רשימה באנגלית של 3–5 תוויות עצם/חומר שזוהו.
-
-החזר JSON בלבד, ללא טקסט נלווה, ללא markdown.`;
+// Token-minimal prompt. Field semantics encoded in the enum lists and
+// the single weight example line; Claude infers the rest.
+const VISION_PROMPT = `פריט ביתי אחד. החזר JSON (Hebrew descriptions, no markdown):
+description(<60ch), quantity, location(סלון/מטבח/חדר שינה/מרפסת/שירותים or ""), intended_for_collection(bool; false=broken/unsafe), item_type(furniture|appliance|textile|small_item|other), material_category(glass|aluminum|wood|plastic|metal|textile|electrical|other), estimated_weight_kg(int; ספה~45 כיסא~6 מזרן~25 מקרר~70 שולחן~35 ארון~50), condition(as_new|good|needs_repair|scrap_only), ai_confidence(0..1), detected_labels([3-5 English tags]).`;
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -108,8 +89,10 @@ serve(async (req: Request) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-5",
-          max_tokens: 600,
+          // Haiku is plenty accurate for furniture recognition on a single
+          // photo and costs ~1/4 of Sonnet per call.
+          model: "claude-haiku-4-5",
+          max_tokens: 350,
           messages: [{
             role: "user",
             content: [

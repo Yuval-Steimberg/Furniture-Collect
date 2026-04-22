@@ -14,28 +14,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ROOM_PROMPT = `אתה מומחה תיעוד עבור "Just A Second" — ארגון פינוי דירות ושימוש חוזר.
-
-בהינתן תמונה של חדר שלם, זהה את כל הפריטים הנפרדים שנראים בבירור (רהיטים,
-מכשירי חשמל, טקסטילים, פריטים קטנים משמעותיים). התעלם מדברים קטנטנים
-(כוסות בודדות, עטים וכדומה).
-
-החזר אובייקט JSON: {"items": [ ... ]} כאשר כל פריט כולל:
-- description: תיאור קצר בעברית (ספה, מזנון, מראה וכד'), כולל חומר/צבע אם נראים
-- quantity: ברירת מחדל 1, או המספר הנראה בבירור (למשל "4 כיסאות")
-- location: חדר מזוהה (סלון, מטבח, חדר שינה, מרפסת, שירותים) — מחרוזת ריקה אם לא ברור
-- intended_for_collection: false אם הפריט שבור/מסוכן; אחרת true
-- item_type: furniture / appliance / textile / small_item / other
-- material_category: glass / aluminum / wood / plastic / metal / textile / electrical / other
-- estimated_weight_kg: מספר שלם לפי ממוצעים סבירים
-- condition: as_new / good / needs_repair / scrap_only
-- ai_confidence: 0.0..1.0 לביטחון שלך על הפריט הזה
-- detected_labels: 3-5 תוויות באנגלית
-
-אם בתמונה מופיעים 4 כיסאות זהים סביב שולחן — זה פריט אחד עם quantity: 4,
-לא ארבעה פריטים נפרדים.
-
-החזר JSON תקין בלבד, ללא markdown, ללא טקסט נלווה.`;
+// Terse multi-item prompt. Quantity-collapse rule kept explicit since it's
+// the most common failure mode.
+const ROOM_PROMPT = `חדר שלם. זהה רהיטים, מכשירים, טקסטיל, פריטים קטנים משמעותיים. דלג על זוטות (כוסות, עטים).
+החזר {"items":[...]}  — לא markdown. כל פריט:
+description(עברית), quantity(int; 4 כיסאות זהים = פריט אחד qty:4), location(סלון/מטבח/חדר שינה/מרפסת/שירותים or ""), intended_for_collection(bool), item_type(furniture|appliance|textile|small_item|other), material_category(glass|aluminum|wood|plastic|metal|textile|electrical|other), estimated_weight_kg(int), condition(as_new|good|needs_repair|scrap_only), ai_confidence(0..1), detected_labels([3-5 English]).`;
 
 const ITEM_TYPES = new Set(["furniture", "appliance", "textile", "small_item", "other"]);
 const MATERIALS  = new Set(["glass", "aluminum", "wood", "plastic", "metal", "textile", "electrical", "other"]);
@@ -81,8 +64,10 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        // Room detection needs Sonnet's stronger multi-item grounding,
+        // but output fits comfortably in 1500 tokens for a typical room.
         model: "claude-sonnet-4-5",
-        max_tokens: 2500,
+        max_tokens: 1500,
         messages: [{
           role: "user",
           content: [

@@ -10,8 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, Search, Edit, UserPlus, Trash2, MoreVertical, ChevronDown, FolderOpen } from 'lucide-react';
+import { Users, Search, Edit, UserPlus, Trash2, MoreVertical, ChevronDown, FolderOpen, ShieldCheck, Briefcase, HardHat, Mail, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { StatCard } from '@/components/StatCard';
+import { EmptyState } from '@/components/EmptyState';
+import { SkeletonStatCard, SkeletonProjectCard } from '@/components/SkeletonCard';
 
 interface UserWithProjects {
   id: string;
@@ -257,70 +260,150 @@ export default function UserManagement() {
     return badges[role as keyof typeof badges] || <Badge>{role}</Badge>;
   };
 
-  const filteredUsers = users.filter(user => 
-    searchQuery === '' ||
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // --- Role filter + stats -------------------------------------------------
+  const [roleFilter, setRoleFilter] = useState<'all' | 'ORG_ADMIN' | 'PROJECT_MANAGER' | 'WORKER'>('all');
+
+  const filteredUsers = users.filter(user => {
+    const matchesSearch =
+      searchQuery === '' ||
+      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRole = roleFilter === 'all' || user.org_role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
+
+  const roleCounts = users.reduce((acc, u) => {
+    acc[u.org_role] = (acc[u.org_role] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const assignedCount = users.filter(u => u.projects.length > 0 || u.org_role === 'ORG_ADMIN').length;
+
+  // Consistent per-user avatar color — hash the name to one of the JAS tones.
+  const avatarColor = (name: string): string => {
+    const palette = ['bg-primary/20 text-primary', 'bg-accent text-accent-foreground', 'bg-foreground text-background', 'bg-muted text-foreground', 'bg-secondary text-secondary-foreground'];
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return palette[h % palette.length];
+  };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">טוען...</div>;
+    return (
+      <div className="min-h-screen bg-muted p-4 sm:p-6" dir="rtl">
+        <div className="max-w-6xl mx-auto space-y-4">
+          <div className="h-10 w-48 bg-muted-foreground/10 rounded animate-pulse" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <SkeletonProjectCard /><SkeletonProjectCard /><SkeletonProjectCard />
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  if (!isOrgAdmin) {
-    return null;
-  }
+  if (!isOrgAdmin) return null;
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-card border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Users className="h-6 w-6" />
-                ניהול משתמשים
-              </h1>
-              <p className="text-sm text-muted-foreground">כל המשתמשים בארגון • מנהל ארגון רואה את כל הפרויקטים והמשתמשים</p>
-            </div>
+      {/* Forest hero header */}
+      <header className="bg-sidebar text-sidebar-foreground shadow-md">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+            <Users className="h-5 w-5" strokeWidth={1.75} />
           </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs uppercase tracking-wider text-sidebar-foreground/70">ניהול ארגון</div>
+            <h1 className="text-lg sm:text-xl font-bold">ניהול משתמשים</h1>
+          </div>
+          <Button onClick={() => toast.info('הזמנה: פתח משתמש ספציפי ובחר "הוסף לפרויקט", או השתמש בטופס Supabase Auth להוספת משתמש חדש')} size="sm" variant="outline" className="bg-transparent border-sidebar-foreground/30 text-sidebar-foreground hover:bg-sidebar-accent gap-2">
+            <UserPlus className="h-4 w-4" />
+            <span className="hidden sm:inline">הזמן משתמש</span>
+          </Button>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{filteredUsers.length} משתמשים</h2>
-        </div>
-        
-        <div className="mb-4">
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+
+        {/* Hero stat cards */}
+        <section>
+          <div className="eyebrow mb-2">סקירה</div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <StatCard label="סה״כ משתמשים" value={users.length} sub={`${assignedCount} משויכים לפרויקטים`} icon={Users} accent="slate" />
+            <StatCard label="מנהלי ארגון" value={roleCounts.ORG_ADMIN ?? 0} sub="גישה מלאה לכל הפרויקטים" icon={ShieldCheck} accent="orange" />
+            <StatCard label="מנהלי פרויקט" value={roleCounts.PROJECT_MANAGER ?? 0} sub="ניהול פרויקט + עובדים" icon={Briefcase} accent="sage" />
+            <StatCard label="עובדים" value={roleCounts.WORKER ?? 0} sub="תיעוד בשטח" icon={HardHat} accent="slate" />
+          </div>
+        </section>
+
+        {/* Search + role filter */}
+        <section className="space-y-3">
           <div className="relative">
-            <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               type="text"
-              placeholder="חפש לפי שם או מייל..."
+              placeholder="חפש לפי שם או אימייל…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pr-10"
+              className="pr-10 h-11"
+              dir="rtl"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute left-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full flex items-center justify-center hover:bg-muted"
+                aria-label="נקה חיפוש"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-        </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {([
+              { v: 'all' as const,              label: 'כל המשתמשים', count: users.length },
+              { v: 'ORG_ADMIN' as const,         label: 'מנהלי ארגון',  count: roleCounts.ORG_ADMIN ?? 0 },
+              { v: 'PROJECT_MANAGER' as const,   label: 'מנהלי פרויקט', count: roleCounts.PROJECT_MANAGER ?? 0 },
+              { v: 'WORKER' as const,            label: 'עובדים',       count: roleCounts.WORKER ?? 0 },
+            ]).map(t => (
+              <button
+                key={t.v}
+                onClick={() => setRoleFilter(t.v)}
+                className={`px-3 h-9 rounded-full text-sm whitespace-nowrap font-semibold transition-colors ${
+                  roleFilter === t.v
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card border border-border hover:bg-muted'
+                }`}
+              >
+                {t.label} <span className="opacity-70 tabular-nums">({t.count})</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">{filteredUsers.length} {filteredUsers.length === 1 ? 'תוצאה' : 'תוצאות'}</p>
+          </div>
+        </section>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filteredUsers.map((user) => (
-            <Card key={user.id} className="overflow-hidden">
+            <Card key={user.id} className="overflow-hidden hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 {/* User Header */}
                 <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 shrink-0 rounded-full bg-primary/20 flex items-center justify-center">
-                    <span className="font-bold text-primary">
+                  <div className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center ${avatarColor(user.name)}`}>
+                    <span className="font-bold text-base">
                       {user.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-semibold truncate">{user.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                        <p className="font-semibold truncate text-sm sm:text-base">{user.name}</p>
+                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                          <Mail className="h-3 w-3 flex-shrink-0" strokeWidth={1.75} />
+                          <span className="truncate">{user.email}</span>
+                        </p>
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -425,8 +508,16 @@ export default function UserManagement() {
 
         {filteredUsers.length === 0 && (
           <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              לא נמצאו משתמשים
+            <CardContent className="p-0">
+              <EmptyState
+                icon={Users}
+                title={users.length === 0 ? 'אין משתמשים בארגון' : 'לא נמצאו תוצאות'}
+                description={users.length === 0
+                  ? 'הזמן את חברי הצוות הראשונים כדי להתחיל לעבוד יחד.'
+                  : 'נסה חיפוש אחר או אפס את הסינון לפי תפקיד.'}
+                actionLabel={users.length === 0 ? undefined : 'אפס סינון'}
+                onAction={users.length === 0 ? undefined : () => { setSearchQuery(''); setRoleFilter('all'); }}
+              />
             </CardContent>
           </Card>
         )}

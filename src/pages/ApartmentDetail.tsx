@@ -404,7 +404,7 @@ export default function ApartmentDetail() {
     }
     setScanning(true);
     try {
-      const compressed = await compressImageToJpeg(file, 1600, 0.8);
+      const compressed = await compressImageToJpeg(file, 1024, 0.78);
       const base64 = await blobToBase64(compressed);
       const { data: parseData, error: parseError } = await supabase.functions.invoke('parse-image-item', {
         body: { image_base64: base64, apartment_id: apartmentId },
@@ -470,7 +470,7 @@ export default function ApartmentDetail() {
     if (!file || !file.type.startsWith('image/')) return;
     setRoomScanning(true);
     try {
-      const compressed = await compressImageToJpeg(file, 1600, 0.8);
+      const compressed = await compressImageToJpeg(file, 1024, 0.78);
       const base64 = await blobToBase64(compressed);
       const { data, error } = await supabase.functions.invoke('parse-room-image', {
         body: { image_base64: base64, apartment_id: apartmentId },
