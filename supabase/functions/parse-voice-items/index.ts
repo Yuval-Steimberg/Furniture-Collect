@@ -73,10 +73,11 @@ serve(async (req) => {
     
     console.log(`Transcribed in ${Date.now() - transcribeStart}ms:`, transcribedText);
 
-    // Step 2: Parse with faster Gemini model
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    // Step 2: Parse — prefer Anthropic native, fall back to Lovable gateway
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+    const LOVABLE_API_KEY   = Deno.env.get('LOVABLE_API_KEY');
+    if (!ANTHROPIC_API_KEY && !LOVABLE_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY (or LOVABLE_API_KEY) is not configured');
     }
 
     const parsePrompt = `Parse this Hebrew apartment evacuation inventory into JSON array. Rules:
@@ -91,26 +92,41 @@ Text: ${transcribedText}
 
 Return ONLY valid JSON array, no markdown.`;
 
-    const parseResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        messages: [{ role: 'user', content: parsePrompt }],
-      }),
-    });
-
-    if (!parseResponse.ok) {
-      const errorText = await parseResponse.text();
-      console.error('Parse error:', errorText);
-      throw new Error(`Parsing failed: ${errorText}`);
+    let parsedContent = '';
+    if (ANTHROPIC_API_KEY) {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: parsePrompt }],
+        }),
+      });
+      if (!r.ok) throw new Error(`Anthropic parse failed: ${r.status} ${await r.text()}`);
+      const j = await r.json();
+      parsedContent = j?.content?.find((c: { type: string }) => c.type === 'text')?.text ?? '';
+    } else {
+      const parseResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-lite',
+          messages: [{ role: 'user', content: parsePrompt }],
+        }),
+      });
+      if (!parseResponse.ok) {
+        const errorText = await parseResponse.text();
+        console.error('Parse error:', errorText);
+        throw new Error(`Parsing failed: ${errorText}`);
+      }
+      const parseResult = await parseResponse.json();
+      parsedContent = parseResult.choices[0].message.content;
     }
-
-    const parseResult = await parseResponse.json();
-    const parsedContent = parseResult.choices[0].message.content;
 
     let items: ParsedItem[];
     try {

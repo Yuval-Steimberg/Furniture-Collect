@@ -13,6 +13,7 @@ import NewProject from "./pages/NewProject";
 import NewApartment from "./pages/NewApartment";
 import ApartmentDetail from "./pages/ApartmentDetail";
 import Statistics from "./pages/Statistics";
+import SustainabilityReport from "./pages/SustainabilityReport";
 import GlobalStatistics from "./pages/GlobalStatistics";
 import ProjectUsers from "./pages/ProjectUsers";
 import UserManagement from "./pages/UserManagement";
@@ -43,6 +44,7 @@ const App = () => {
           <Route path="/projects/:projectId/apartments/new" element={<AppLayout><NewApartment /></AppLayout>} />
           <Route path="/projects/:projectId/apartments/:apartmentId" element={<AppLayout><ApartmentDetail /></AppLayout>} />
           <Route path="/projects/:projectId/statistics" element={<AppLayout><Statistics /></AppLayout>} />
+          <Route path="/projects/:projectId/report" element={<SustainabilityReport />} />
           <Route path="/projects/:projectId/users" element={<AppLayout><ProjectUsers /></AppLayout>} />
           <Route path="/global-statistics" element={<AppLayout><GlobalStatistics /></AppLayout>} />
           <Route path="/user-management" element={<AppLayout><UserManagement /></AppLayout>} />

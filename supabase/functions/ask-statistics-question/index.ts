@@ -18,9 +18,10 @@ serve(async (req) => {
       throw new Error('Question is required');
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+    const LOVABLE_API_KEY   = Deno.env.get('LOVABLE_API_KEY');
+    if (!ANTHROPIC_API_KEY && !LOVABLE_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY (or LOVABLE_API_KEY) is not configured');
     }
 
     const prompt = `You are an assistant for an item collection and recycling management system.
@@ -33,42 +34,55 @@ ${projectsSummary}
 
 Answer the following question in Hebrew based on the data provided.
 Be concise and helpful. If you need to calculate CO2 savings, use these factors per kg of material:
-- Wood: 0.5 kg CO2
-- Metal: 2.5 kg CO2
-- Plastic: 3.0 kg CO2
-- Glass: 0.8 kg CO2
-- Aluminum: 8.0 kg CO2
-- Textile: 1.5 kg CO2
-- Electrical: 2.0 kg CO2
-- Other: 1.0 kg CO2
+- Wood: 1.8 kg CO2-eq
+- Metal: 2.0 kg CO2-eq
+- Plastic: 2.5 kg CO2-eq
+- Glass: 0.6 kg CO2-eq
+- Aluminum: 9.1 kg CO2-eq
+- Textile: 8.0 kg CO2-eq
+- Electrical: 4.5 kg CO2-eq
+- Other: 1.5 kg CO2-eq
 
 Question: ${question}
 
 Provide a clear, concise answer in Hebrew.`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.5,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI error:', errorText);
-      throw new Error(`AI request failed: ${errorText}`);
+    let answer = '';
+    if (ANTHROPIC_API_KEY) {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!r.ok) throw new Error(`Anthropic failed: ${r.status} ${await r.text()}`);
+      const j = await r.json();
+      answer = j?.content?.find((c: { type: string }) => c.type === 'text')?.text ?? '';
+    } else {
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.5,
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('AI error:', errorText);
+        throw new Error(`AI request failed: ${errorText}`);
+      }
+      const result = await response.json();
+      answer = result.choices[0].message.content;
     }
-
-    const result = await response.json();
-    const answer = result.choices[0].message.content;
 
     return new Response(
       JSON.stringify({ answer }),

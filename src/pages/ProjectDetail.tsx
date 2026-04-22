@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -191,10 +191,22 @@ export default function ProjectDetail() {
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4">
           <h2 className="text-lg sm:text-xl font-bold">בניינים ודירות</h2>
-          <Button onClick={() => navigate(`/projects/${projectId}/apartments/new`)} size="sm" className="gap-2 w-full sm:w-auto h-10 sm:h-9">
-            <Plus className="h-4 w-4" />
-            הוסף בניין
-          </Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              onClick={() => navigate(`/projects/${projectId}/report`)}
+              size="sm"
+              variant="outline"
+              className="gap-2 flex-1 sm:flex-none h-10 sm:h-9"
+              title="הפק דוח קיימות"
+            >
+              <FileText className="h-4 w-4" />
+              <span>דוח קיימות</span>
+            </Button>
+            <Button onClick={() => navigate(`/projects/${projectId}/apartments/new`)} size="sm" className="gap-2 flex-1 sm:flex-none h-10 sm:h-9">
+              <Plus className="h-4 w-4" />
+              הוסף בניין
+            </Button>
+          </div>
         </div>
 
         {/* Filter buttons */}
