@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { SetupScreen } from "@/components/SetupScreen";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import Auth from "./pages/Auth";
+import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import NewProject from "./pages/NewProject";
@@ -35,7 +36,7 @@ const App = () => {
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/projects" replace />} />
+          <Route path="/" element={<AppLayout><Dashboard /></AppLayout>} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/accept-invitation" element={<AcceptInvitation />} />
           <Route path="/projects" element={<AppLayout><Projects /></AppLayout>} />

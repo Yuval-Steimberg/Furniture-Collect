@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HardHat, Plus, LogOut, Building2, MapPin, Calendar, User, MoreVertical, Edit2, Trash2, Archive, ArchiveRestore, LayoutGrid, List } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Session } from '@supabase/supabase-js';
+import { EmptyState } from '@/components/EmptyState';
+import { SkeletonProjectCard } from '@/components/SkeletonCard';
 
 interface Profile {
   id: string;
@@ -395,10 +397,14 @@ export default function Projects() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <HardHat className="h-12 w-12 text-primary animate-pulse mx-auto mb-4" />
-          <p className="text-muted-foreground">טוען...</p>
+      <div className="min-h-screen bg-muted p-4 sm:p-6" dir="rtl">
+        <div className="max-w-6xl mx-auto space-y-4">
+          <div className="h-8 w-48 bg-muted-foreground/10 rounded animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            <SkeletonProjectCard />
+            <SkeletonProjectCard />
+            <SkeletonProjectCard />
+          </div>
         </div>
       </div>
     );
@@ -477,9 +483,14 @@ export default function Projects() {
           <TabsContent value="active">
             {activeProjects.length === 0 ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">אין פרויקטים פעילים</p>
+                <CardContent className="p-0">
+                  <EmptyState
+                    icon={Building2}
+                    title="אין פרויקטים פעילים"
+                    description="צור פרויקט ראשון כדי להתחיל לתעד דירות בפינוי."
+                    actionLabel="צור פרויקט"
+                    onAction={() => navigate('/projects/new')}
+                  />
                 </CardContent>
               </Card>
             ) : viewMode === 'grid' ? (
