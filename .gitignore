@@ -32,3 +32,8 @@ dist-ssr
 # Lovable workspace leftovers
 .workspace
 .vercel
+
+# Build artifacts that snuck in — should have been gitignored from start
+supabase/.temp/
+deno.lock
+*.tsbuildinfo
