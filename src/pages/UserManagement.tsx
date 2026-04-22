@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, Search, Edit, UserPlus, Trash2, MoreVertical, ChevronDown, FolderOpen, ShieldCheck, Briefcase, HardHat, Mail, X } from 'lucide-react';
+import { Users, Search, Edit, UserPlus, Trash2, MoreVertical, ChevronDown, FolderOpen, ShieldCheck, Briefcase, HardHat, Mail, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
@@ -21,6 +21,9 @@ interface UserWithProjects {
   name: string;
   email: string;
   org_role: string;
+  title?: string | null;
+  is_active?: boolean;
+  last_active_at?: string | null;
   projects: Array<{
     project_id: string;
     project_name: string;
@@ -44,6 +47,12 @@ export default function UserManagement() {
   const [allProjects, setAllProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [deleteUserDialog, setDeleteUserDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserWithProjects | null>(null);
+  // New in v2: invite + edit + suspend flows
+  const [inviteDialog, setInviteDialog] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: '', name: '', title: '', org_role: 'WORKER', project_id: '', project_role: 'WORKER', password: '' });
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [editUserDialog, setEditUserDialog] = useState(false);
+  const [editUserForm, setEditUserForm] = useState({ name: '', title: '', org_role: 'WORKER' });
 
   useEffect(() => {
     checkPermissions();
@@ -85,7 +94,7 @@ export default function UserManagement() {
       // Load all users
       const { data: allUsers, error: usersError } = await supabase
         .from('profiles')
-        .select('id, name, email, org_role')
+        .select('id, name, email, org_role, title, is_active, last_active_at')
         .order('name');
 
       if (usersError) throw usersError;
@@ -250,6 +259,72 @@ export default function UserManagement() {
     }
   };
 
+  // ---- Invite + Edit + Suspend (v2) ------------------------------------
+  const submitInvite = async () => {
+    if (!inviteForm.email.trim() || !inviteForm.name.trim()) {
+      toast.error('אימייל ושם נדרשים'); return;
+    }
+    setInviteSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: inviteForm.email.trim(),
+          name: inviteForm.name.trim(),
+          password: inviteForm.password.trim() || undefined,
+          org_role: inviteForm.org_role,
+          title: inviteForm.title.trim() || null,
+          project_id: inviteForm.project_id || undefined,
+          project_role: inviteForm.project_id ? inviteForm.project_role : undefined,
+        },
+      });
+      if (error) throw new Error(error.message ?? 'שגיאה');
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`המשתמש ${inviteForm.name} נוסף בהצלחה${(data as any)?.generated_password ? ' · סיסמה זמנית נוצרה אוטומטית' : ''}`);
+      setInviteDialog(false);
+      setInviteForm({ email: '', name: '', title: '', org_role: 'WORKER', project_id: '', project_role: 'WORKER', password: '' });
+      loadData();
+    } catch (err: any) {
+      console.error('invite failed:', err);
+      toast.error(err?.message ? `שגיאה בהזמנה: ${err.message}` : 'שגיאה בהזמנה');
+    } finally { setInviteSubmitting(false); }
+  };
+
+  const submitEditUser = async () => {
+    if (!selectedUser) return;
+    try {
+      const { error } = await supabase.functions.invoke('update-user', {
+        body: {
+          user_id: selectedUser.id,
+          updates: {
+            name: editUserForm.name.trim(),
+            title: editUserForm.title.trim() || null,
+            org_role: editUserForm.org_role,
+          },
+        },
+      });
+      if (error) throw new Error(error.message);
+      toast.success('המשתמש עודכן');
+      setEditUserDialog(false);
+      loadData();
+    } catch (err: any) {
+      toast.error('שגיאה בעדכון: ' + (err?.message ?? ''));
+    }
+  };
+
+  const toggleSuspend = async (user: UserWithProjects) => {
+    const nextActive = !(user.is_active !== false); // treat undefined as active
+    try {
+      const { error } = await supabase.functions.invoke('update-user', {
+        body: { user_id: user.id, updates: { is_active: !nextActive ? true : false } },
+      });
+      if (error) throw new Error(error.message);
+      toast.success(nextActive ? 'המשתמש הושעה' : 'המשתמש הוחזר לפעילות');
+      loadData();
+    } catch (err: any) {
+      toast.error('שגיאה: ' + (err?.message ?? ''));
+    }
+  };
+
   const getRoleBadge = (role: string) => {
     const badges = {
       'ORG_ADMIN': <Badge className="bg-purple-500">מנהל ארגון</Badge>,
@@ -316,7 +391,7 @@ export default function UserManagement() {
             <div className="text-xs uppercase tracking-wider text-sidebar-foreground/70">ניהול ארגון</div>
             <h1 className="text-lg sm:text-xl font-bold">ניהול משתמשים</h1>
           </div>
-          <Button onClick={() => toast.info('הזמנה: פתח משתמש ספציפי ובחר "הוסף לפרויקט", או השתמש בטופס Supabase Auth להוספת משתמש חדש')} size="sm" variant="outline" className="bg-transparent border-sidebar-foreground/30 text-sidebar-foreground hover:bg-sidebar-accent gap-2">
+          <Button onClick={() => setInviteDialog(true)} size="sm" variant="outline" className="bg-transparent border-sidebar-foreground/30 text-sidebar-foreground hover:bg-sidebar-accent gap-2">
             <UserPlus className="h-4 w-4" />
             <span className="hidden sm:inline">הזמן משתמש</span>
           </Button>
@@ -385,6 +460,53 @@ export default function UserManagement() {
           </div>
         </section>
 
+        {/* Permissions reference — collapsible block explains what each role can do */}
+        <details className="rounded-xl border border-border bg-card overflow-hidden group">
+          <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between hover:bg-muted/40">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">מי יכול לעשות מה</span>
+            </div>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="px-4 pb-4 pt-0 text-sm space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr className="text-muted-foreground">
+                    <th className="text-right p-2 border-b border-border font-semibold">פעולה</th>
+                    <th className="text-center p-2 border-b border-border font-semibold whitespace-nowrap">מנהל ארגון</th>
+                    <th className="text-center p-2 border-b border-border font-semibold whitespace-nowrap">מנהל פרויקט</th>
+                    <th className="text-center p-2 border-b border-border font-semibold whitespace-nowrap">עובד</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {([
+                    ['צפייה בכל הפרויקטים',       true,  false, false],
+                    ['יצירת פרויקט חדש',          true,  false, false],
+                    ['עריכת פרויקט',              true,  true,  false],
+                    ['הוספת/הסרת משתמשים לפרויקט', true, true,  false],
+                    ['יצירת דירה',                true,  true,  false],
+                    ['תיעוד פריטים (קול/תמונה/טקסט)', true, true, true],
+                    ['סימון פריט כנאסף',           true,  true,  true],
+                    ['מחיקת פריט',                true,  true,  true],
+                    ['יצירת דוח קיימות',          true,  true,  false],
+                    ['ניהול משתמשים (עמוד זה)',    true,  false, false],
+                    ['הוספה/השעיה/מחיקה של משתמשים', true, false, false],
+                  ] as Array<[string, boolean, boolean, boolean]>).map(([label, a, m, w]) => (
+                    <tr key={label} className="border-b border-border/60">
+                      <td className="p-2 text-right">{label}</td>
+                      <td className="p-2 text-center">{a ? <Check className="inline h-4 w-4 text-accent-foreground" strokeWidth={2.5} /> : '—'}</td>
+                      <td className="p-2 text-center">{m ? <Check className="inline h-4 w-4 text-accent-foreground" strokeWidth={2.5} /> : '—'}</td>
+                      <td className="p-2 text-center">{w ? <Check className="inline h-4 w-4 text-accent-foreground" strokeWidth={2.5} /> : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filteredUsers.map((user) => (
             <Card key={user.id} className="overflow-hidden hover:shadow-md transition-shadow">
@@ -399,7 +521,17 @@ export default function UserManagement() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-semibold truncate text-sm sm:text-base">{user.name}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-semibold truncate text-sm sm:text-base">{user.name}</p>
+                          {user.is_active === false && (
+                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-destructive/20 text-destructive whitespace-nowrap">
+                              מושעה
+                            </span>
+                          )}
+                        </div>
+                        {user.title && (
+                          <p className="text-xs text-foreground/80 truncate">{user.title}</p>
+                        )}
                         <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
                           <Mail className="h-3 w-3 flex-shrink-0" strokeWidth={1.75} />
                           <span className="truncate">{user.email}</span>
@@ -414,11 +546,15 @@ export default function UserManagement() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
                             setSelectedUser(user);
-                            setNewOrgRole(user.org_role);
-                            setEditOrgRoleDialog(true);
+                            setEditUserForm({
+                              name: user.name ?? '',
+                              title: user.title ?? '',
+                              org_role: user.org_role ?? 'WORKER',
+                            });
+                            setEditUserDialog(true);
                           }}>
                             <Edit className="h-4 w-4 ml-2" />
-                            ערוך תפקיד ארגוני
+                            ערוך פרטי משתמש
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => {
                             setSelectedUser(user);
@@ -430,7 +566,13 @@ export default function UserManagement() {
                             הוסף לפרויקט
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
+                          <DropdownMenuItem onClick={() => toggleSuspend(user)}>
+                            {user.is_active === false
+                              ? <><Users className="h-4 w-4 ml-2" />החזר לפעילות</>
+                              : <><X className="h-4 w-4 ml-2" />השעה משתמש</>}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={() => {
                               setUserToDelete(user);
@@ -664,6 +806,112 @@ export default function UserManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Invite new user */}
+      <Dialog open={inviteDialog} onOpenChange={setInviteDialog}>
+        <DialogContent dir="rtl" className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>הזמן משתמש חדש</DialogTitle>
+            <DialogDescription>
+              המשתמש ייווצר מיד עם אימייל מאומת ויוכל להתחבר ישירות. אם לא תמלא סיסמה, תיווצר סיסמה זמנית שכדאי לשנות לאחר ההתחברות הראשונה.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-sm font-medium mb-1 block">שם מלא *</label>
+              <Input value={inviteForm.name} onChange={e => setInviteForm({ ...inviteForm, name: e.target.value })} placeholder="יובל שטיינברג" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">אימייל *</label>
+              <Input type="email" dir="ltr" value={inviteForm.email} onChange={e => setInviteForm({ ...inviteForm, email: e.target.value })} placeholder="user@example.com" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">כותרת (אופציונלי)</label>
+              <Input value={inviteForm.title} onChange={e => setInviteForm({ ...inviteForm, title: e.target.value })} placeholder='למשל "ראש צוות", "מנהל תפעול"' />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">תפקיד ארגוני *</label>
+              <Select value={inviteForm.org_role} onValueChange={v => setInviteForm({ ...inviteForm, org_role: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ORG_ADMIN">מנהל ארגון — גישה מלאה לכל הפרויקטים</SelectItem>
+                  <SelectItem value="PROJECT_MANAGER">מנהל פרויקט — ניהול פרויקטים ספציפיים</SelectItem>
+                  <SelectItem value="WORKER">עובד — תיעוד בשטח</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">סיסמה ראשונית (אופציונלי)</label>
+              <Input type="text" dir="ltr" value={inviteForm.password} onChange={e => setInviteForm({ ...inviteForm, password: e.target.value })} placeholder="אם ריק — תיווצר סיסמה אוטומטית" />
+            </div>
+            <div className="pt-3 border-t">
+              <label className="text-sm font-medium mb-1 block">הקצה לפרויקט מיד (אופציונלי)</label>
+              <Select value={inviteForm.project_id} onValueChange={v => setInviteForm({ ...inviteForm, project_id: v })}>
+                <SelectTrigger><SelectValue placeholder="בחר פרויקט או השאר ריק" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">לא כרגע</SelectItem>
+                  {allProjects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {inviteForm.project_id && (
+              <div>
+                <label className="text-sm font-medium mb-1 block">תפקיד בפרויקט</label>
+                <Select value={inviteForm.project_role} onValueChange={v => setInviteForm({ ...inviteForm, project_role: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PROJECT_MANAGER">מנהל פרויקט</SelectItem>
+                    <SelectItem value="WORKER">עובד</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInviteDialog(false)}>ביטול</Button>
+            <Button onClick={submitInvite} disabled={inviteSubmitting || !inviteForm.email.trim() || !inviteForm.name.trim()}>
+              {inviteSubmitting ? 'שולח…' : 'צור משתמש'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit user profile */}
+      <Dialog open={editUserDialog} onOpenChange={setEditUserDialog}>
+        <DialogContent dir="rtl" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>עריכת פרטי משתמש</DialogTitle>
+            <DialogDescription>
+              שינוי האימייל של המשתמש נעשה דרך הגדרות החשבון, לא כאן.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-sm font-medium mb-1 block">שם מלא</label>
+              <Input value={editUserForm.name} onChange={e => setEditUserForm({ ...editUserForm, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">כותרת</label>
+              <Input value={editUserForm.title} onChange={e => setEditUserForm({ ...editUserForm, title: e.target.value })} placeholder='למשל "ראש צוות"' />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">תפקיד ארגוני</label>
+              <Select value={editUserForm.org_role} onValueChange={v => setEditUserForm({ ...editUserForm, org_role: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ORG_ADMIN">מנהל ארגון</SelectItem>
+                  <SelectItem value="PROJECT_MANAGER">מנהל פרויקט</SelectItem>
+                  <SelectItem value="WORKER">עובד</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUserDialog(false)}>ביטול</Button>
+            <Button onClick={submitEditUser}>שמור שינויים</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
