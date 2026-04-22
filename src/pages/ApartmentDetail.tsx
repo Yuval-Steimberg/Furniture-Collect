@@ -9,10 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
+import { Lightbox } from '@/components/Lightbox';
+import { EmptyState } from '@/components/EmptyState';
+import { SkeletonItemRow } from '@/components/SkeletonCard';
 
 // ---------- image helpers (scan flow) ------------------------------------
 // Resize to `maxLongSide` and encode as JPEG at `quality`. Keeps payloads
@@ -123,6 +126,12 @@ export default function ApartmentDetail() {
   const [roomDetected, setRoomDetected] = useState<any[] | null>(null);
   const [roomSelected, setRoomSelected] = useState<Set<number>>(new Set());
   const [duplicateWarnings, setDuplicateWarnings] = useState<Map<string, { duplicate_of: string; reason: string }>>(new Map());
+
+  // Bulk select + grouping UI
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -594,6 +603,66 @@ export default function ApartmentDetail() {
     }
   };
 
+  // ---- Bulk select ------------------------------------------------------
+  const toggleBulk = (id: string) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const exitBulkMode = () => { setBulkMode(false); setBulkSelected(new Set()); };
+  const bulkMarkCollected = async (flag: boolean) => {
+    if (bulkSelected.size === 0) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('no user');
+      const { error } = await supabase
+        .from('items')
+        .update({
+          collected: flag,
+          collected_by_user_id: flag ? user.id : null,
+        } as any)
+        .in('id', [...bulkSelected]);
+      if (error) throw error;
+      toast.success(flag ? `${bulkSelected.size} פריטים סומנו כנאספו` : `${bulkSelected.size} פריטים בוטלו מאיסוף`);
+      await loadData();
+      exitBulkMode();
+    } catch (err: any) {
+      console.error('bulk update failed:', err);
+      toast.error('שגיאה בעדכון בכמות');
+    }
+  };
+  const bulkDelete = async () => {
+    if (bulkSelected.size === 0) return;
+    if (!confirm(`למחוק ${bulkSelected.size} פריטים?`)) return;
+    try {
+      const { error } = await supabase.from('items').delete().in('id', [...bulkSelected]);
+      if (error) throw error;
+      toast.success(`${bulkSelected.size} פריטים נמחקו`);
+      await loadData();
+      exitBulkMode();
+    } catch (err: any) {
+      console.error('bulk delete failed:', err);
+      toast.error('שגיאה במחיקה');
+    }
+  };
+  const toggleLocationCollapsed = (loc: string) => {
+    setCollapsedLocations(prev => {
+      const next = new Set(prev);
+      if (next.has(loc)) next.delete(loc); else next.add(loc);
+      return next;
+    });
+  };
+  const selectAllInLocation = (loc: string, itemsInLoc: Item[]) => {
+    setBulkMode(true);
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      itemsInLoc.forEach(i => next.add(i.id));
+      return next;
+    });
+  };
+
   // Per-item photo attach — triggered by the small Camera icon on each
   // item row. Unlike "צלם" (which creates a NEW item via vision autofill),
   // this just attaches a reference photo to an existing item.
@@ -757,6 +826,25 @@ export default function ApartmentDetail() {
     if (filter === 'pending') return item.intended_for_collection && !item.collected;
     return true;
   });
+
+  // Group filtered items by location for the collapsible sectioned list.
+  const groupedItems: Array<[string, Item[]]> = (() => {
+    const byLoc = new Map<string, Item[]>();
+    for (const item of filteredItems) {
+      const loc = item.location?.trim() || 'ללא מיקום';
+      if (!byLoc.has(loc)) byLoc.set(loc, []);
+      byLoc.get(loc)!.push(item);
+    }
+    // Sort locations so "ללא מיקום" goes last; others alphabetically (Hebrew locale).
+    return [...byLoc.entries()].sort((a, b) => {
+      if (a[0] === 'ללא מיקום') return 1;
+      if (b[0] === 'ללא מיקום') return -1;
+      return a[0].localeCompare(b[0], 'he');
+    });
+  })();
+
+  // Collect all item photos in display order for the lightbox.
+  const photoItems = filteredItems.filter(i => !!i.image_url);
   const getStatusBadge = (status: string) => {
     const badges = {
       'NOT_STARTED': <Badge variant="secondary">לא הושלם</Badge>,
@@ -781,7 +869,17 @@ export default function ApartmentDetail() {
                 בניין {apartmentInfo?.building_number} · דירה {apartmentInfo?.apartment_number}
               </h1>
             </div>
-            <div className="flex-shrink-0">
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setBulkMode(v => !v)}
+                className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9"
+                title={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
+                aria-label={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
+              >
+                <Check className={`h-4 w-4 ${bulkMode ? 'text-primary' : ''}`} />
+              </Button>
               {getStatusBadge(apartmentInfo?.status)}
             </div>
           </div>
@@ -833,22 +931,116 @@ export default function ApartmentDetail() {
           </div>
         </div>
 
-        <div className="space-y-2 sm:space-y-3 w-full">
-          {filteredItems.map(item => <Card key={item.id} className="w-full">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-start gap-2 sm:gap-3 w-full">
-                    {item.image_url && (
-                      <a
-                        href={item.image_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-shrink-0 block h-14 w-14 sm:h-16 sm:w-16 rounded-md overflow-hidden border border-border bg-muted"
-                        aria-label="הצג תמונת פריט"
-                      >
-                        <img src={item.image_url} alt={item.description} className="h-full w-full object-cover" loading="lazy" />
-                      </a>
-                    )}
+        {/* Bulk-action bar — appears when one or more items are selected */}
+        {bulkMode && (
+          <div className="sticky top-[4rem] sm:top-[4.5rem] z-20 bg-foreground text-background rounded-lg shadow-lg mb-3 p-2.5 sm:p-3 flex items-center gap-2">
+            <span className="text-sm font-semibold flex-1 truncate">
+              {bulkSelected.size} נבחרו
+            </span>
+            <Button size="sm" variant="secondary" onClick={() => bulkMarkCollected(true)} disabled={bulkSelected.size === 0} className="h-8 gap-1">
+              <Check className="h-3.5 w-3.5" /> נאסף
+            </Button>
+            <Button size="sm" variant="destructive" onClick={bulkDelete} disabled={bulkSelected.size === 0} className="h-8 gap-1">
+              <Trash2 className="h-3.5 w-3.5" /> מחק
+            </Button>
+            <Button size="sm" variant="ghost" onClick={exitBulkMode} className="h-8 w-8 p-0 text-background hover:bg-background/10">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="space-y-2 sm:space-y-3">
+            <SkeletonItemRow /><SkeletonItemRow /><SkeletonItemRow />
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <Card className="w-full">
+            <CardContent className="p-0">
+              <EmptyState
+                icon={Package}
+                title={items.length === 0 ? 'אין פריטים בדירה הזו' : 'אין תוצאות לסינון הנוכחי'}
+                description={items.length === 0
+                  ? 'התחל לתעד פריטים — הקלט את הקול שלך, צלם תמונה, או הוסף ידנית.'
+                  : 'נסה לשנות את הסינון או לבטל את החיפוש.'}
+                actionLabel={items.length === 0 ? 'הקלט פריטים' : undefined}
+                onAction={items.length === 0 ? toggleRecording : undefined}
+                secondaryLabel={items.length === 0 ? 'הוסף ידנית' : undefined}
+                onSecondary={items.length === 0 ? () => setShowManualDialog(true) : undefined}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+        <div className="space-y-4 w-full">
+          {groupedItems.map(([loc, locItems]) => {
+            const isCollapsed = collapsedLocations.has(loc);
+            const allInLocSelected = locItems.every(i => bulkSelected.has(i.id));
+            const locKg = locItems.reduce((s, i) => s + ((i.estimated_weight_kg ?? 0) * (i.quantity ?? 1)), 0);
+            return (
+            <section key={loc}>
+              {/* Location header — sticky, tap to collapse, long-press/button to select-all */}
+              <div className="sticky top-[3.2rem] sm:top-[3.7rem] z-10 bg-muted/95 backdrop-blur-sm -mx-3 sm:mx-0 px-3 sm:px-0 py-1.5 mb-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleLocationCollapsed(loc)}
+                  className="flex items-center gap-1.5 text-sm font-semibold hover:text-primary transition-colors"
+                >
+                  {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>{loc}</span>
+                  <span className="text-xs text-muted-foreground font-normal">({locItems.length}{locKg > 0 ? ` · ${Math.round(locKg)} ק"ג` : ''})</span>
+                </button>
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (allInLocSelected) {
+                      const next = new Set(bulkSelected);
+                      locItems.forEach(i => next.delete(i.id));
+                      setBulkSelected(next);
+                      if (next.size === 0) setBulkMode(false);
+                    } else {
+                      selectAllInLocation(loc, locItems);
+                    }
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {allInLocSelected ? 'בטל בחירה' : 'בחר הכל'}
+                </button>
+              </div>
+
+              {!isCollapsed && (
+                <div className="space-y-2 sm:space-y-3">
+                  {locItems.map(item => (
+                    <Card
+                      key={item.id}
+                      className={`w-full transition-all ${bulkSelected.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+                      onClick={bulkMode ? () => toggleBulk(item.id) : undefined}
+                      role={bulkMode ? 'button' : undefined}
+                    >
+                      <CardContent className="p-3 sm:p-4">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-start gap-2 sm:gap-3 w-full">
+                            {/* Bulk checkbox */}
+                            {bulkMode && (
+                              <div className={`flex-shrink-0 h-5 w-5 mt-0.5 rounded border-2 flex items-center justify-center transition-colors ${bulkSelected.has(item.id) ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+                                {bulkSelected.has(item.id) && <Check className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={3} />}
+                              </div>
+                            )}
+                            {item.image_url && (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  if (bulkMode) return;
+                                  e.stopPropagation();
+                                  const idx = photoItems.findIndex(p => p.id === item.id);
+                                  setLightboxIndex(idx >= 0 ? idx : 0);
+                                }}
+                                className="flex-shrink-0 block h-14 w-14 sm:h-16 sm:w-16 rounded-md overflow-hidden border border-border bg-muted"
+                                aria-label="הצג תמונת פריט"
+                              >
+                                <img src={item.image_url} alt={item.description} className="h-full w-full object-cover" loading="lazy" />
+                              </button>
+                            )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <p className="font-semibold text-sm sm:text-base break-words">{item.description}</p>
@@ -934,14 +1126,14 @@ export default function ApartmentDetail() {
                   </div>
                 </div>
               </CardContent>
-            </Card>)}
-
-          {filteredItems.length === 0 && <Card className="w-full">
-              <CardContent className="py-12 text-center text-muted-foreground">
-                אין פריטים להצגה
-              </CardContent>
-            </Card>}
+            </Card>))}
+                </div>
+              )}
+            </section>
+          );
+          })}
         </div>
+        )}
       </main>
 
       <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-background border-t shadow-lg">
@@ -1086,6 +1278,19 @@ export default function ApartmentDetail() {
         onUndo={handleUndoBatch}
         onDismiss={() => dismissUndo()}
       />
+
+      {/* Full-screen swipable photo gallery */}
+      {lightboxIndex != null && photoItems.length > 0 && (
+        <Lightbox
+          items={photoItems.map(i => ({
+            src: i.image_url!,
+            alt: i.description,
+            caption: `${i.description}${i.location ? ` · ${i.location}` : ''}`,
+          }))}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
 
 
       {/* Edit Item Dialog */}
