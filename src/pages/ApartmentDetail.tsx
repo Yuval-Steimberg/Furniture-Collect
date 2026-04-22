@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
@@ -65,6 +65,8 @@ interface Item {
   condition?: 'as_new' | 'good' | 'needs_repair' | 'scrap_only' | null;
   ai_confidence?: number | null;
   source?: 'voice' | 'text' | 'image' | 'manual' | null;
+  estimated_resale_ils?: number | null;
+  duplicate_of?: string | null;
   created_by_user_id: string;
   collected_by_user_id: string | null;
   created_by?: {
@@ -107,9 +109,20 @@ export default function ApartmentDetail() {
   const audioChunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const itemPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const roomInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [roomScanning, setRoomScanning] = useState(false);
   const [photoingItemId, setPhotoingItemId] = useState<string | null>(null);
   const { batch: undoBatch, push: pushUndo, dismiss: dismissUndo } = useUndoStack({ windowMs: 5000 });
+
+  // Smart search + room-sweep + duplicate-warning state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchIds, setSearchIds] = useState<Set<string> | null>(null);
+  const [searchExplanation, setSearchExplanation] = useState<string>('');
+  const [roomDetected, setRoomDetected] = useState<any[] | null>(null);
+  const [roomSelected, setRoomSelected] = useState<Set<number>>(new Set());
+  const [duplicateWarnings, setDuplicateWarnings] = useState<Map<string, { duplicate_of: string; reason: string }>>(new Map());
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -277,6 +290,7 @@ export default function ApartmentDetail() {
         .select('id');
       if (error) throw error;
       pushUndo((inserted ?? []).map((r: any) => r.id));
+      void runDuplicateCheck((inserted ?? []).map((r: any) => r.id));
 
       // Reload and reset state (the undo flyout replaces the success toast
       // for auto-inserts, so users can undo rather than just being told).
@@ -334,6 +348,7 @@ export default function ApartmentDetail() {
         .select('id');
       if (insertError) throw insertError;
       pushUndo((inserted ?? []).map((r: any) => r.id));
+      void runDuplicateCheck((inserted ?? []).map((r: any) => r.id));
       setShowManualDialog(false);
       setManualItem({
         description: ''
@@ -405,6 +420,7 @@ export default function ApartmentDetail() {
       } as any).select('id');
       if (insertError) throw insertError;
       pushUndo((insertedRows ?? []).map((r: any) => r.id));
+      void runDuplicateCheck((insertedRows ?? []).map((r: any) => r.id));
 
       const lowConf = (parsed.ai_confidence ?? 1) < 0.6;
       if (lowConf) toast.message('פריט נוסף — מומלץ לאמת תיאור');
@@ -416,6 +432,168 @@ export default function ApartmentDetail() {
       setScanning(false);
     }
   };
+  // ---- Room sweep (multi-item vision) ---------------------------------
+  const openRoomPicker = () => {
+    if (scanning || roomScanning || processing || recording) return;
+    roomInputRef.current?.click();
+  };
+  const handleRoomImage = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return;
+    setRoomScanning(true);
+    try {
+      const compressed = await compressImageToJpeg(file, 1600, 0.8);
+      const base64 = await blobToBase64(compressed);
+      const { data, error } = await supabase.functions.invoke('parse-room-image', {
+        body: { image_base64: base64, apartment_id: apartmentId },
+      });
+      if (error) throw error;
+      const parsedItems = (data?.items ?? []) as any[];
+      if (parsedItems.length === 0) {
+        toast.message('לא זוהו פריטים בתמונה — נסה זווית אחרת');
+        return;
+      }
+      setRoomDetected(parsedItems);
+      setRoomSelected(new Set(parsedItems.map((_, i) => i))); // all selected by default
+    } catch (err: any) {
+      console.error('room sweep failed:', err);
+      toast.error(err?.message ? `שגיאה בסריקת חדר: ${err.message}` : 'שגיאה בסריקת חדר');
+    } finally {
+      setRoomScanning(false);
+    }
+  };
+  const confirmRoomItems = async () => {
+    if (!roomDetected) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not found');
+      const rows = [...roomSelected]
+        .map(idx => roomDetected[idx])
+        .map(p => ({
+          project_id: projectId,
+          apartment_id: apartmentId,
+          description: p.description,
+          quantity: p.quantity ?? 1,
+          location: p.location || null,
+          intended_for_collection: p.intended_for_collection !== false,
+          item_type: p.item_type as any,
+          material_category: p.material_category as any,
+          estimated_weight_kg: p.estimated_weight_kg ?? null,
+          condition: p.condition as any,
+          ai_confidence: p.ai_confidence ?? null,
+          source: 'image' as any,
+          created_by_user_id: user.id,
+        }));
+      if (rows.length === 0) {
+        setRoomDetected(null);
+        return;
+      }
+      const { data: inserted, error } = await supabase.from('items').insert(rows as any).select('id');
+      if (error) throw error;
+      pushUndo((inserted ?? []).map((r: any) => r.id));
+      void runDuplicateCheck((inserted ?? []).map((r: any) => r.id));
+      toast.success(`${rows.length} פריטים נוספו מסריקת החדר`);
+      setRoomDetected(null);
+      setRoomSelected(new Set());
+      await loadData();
+    } catch (err: any) {
+      console.error('room confirm failed:', err);
+      toast.error('שגיאה בהוספת פריטי החדר');
+    }
+  };
+
+  // ---- Smart search -----------------------------------------------------
+  const runSmartSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) { setSearchIds(null); setSearchExplanation(''); return; }
+    setSearching(true);
+    try {
+      const lean = items.map(i => ({
+        id: i.id, description: i.description, quantity: i.quantity, location: i.location,
+        item_type: i.item_type, material_category: i.material_category,
+        condition: i.condition, intended_for_collection: i.intended_for_collection,
+        collected: i.collected, estimated_weight_kg: i.estimated_weight_kg,
+        estimated_resale_ils: i.estimated_resale_ils,
+      }));
+      const { data, error } = await supabase.functions.invoke('smart-search', {
+        body: { query: q, items: lean },
+      });
+      if (error) throw error;
+      setSearchIds(new Set((data?.matching_ids ?? []) as string[]));
+      setSearchExplanation(String(data?.explanation ?? ''));
+    } catch (err: any) {
+      console.error('smart search failed:', err);
+      toast.error('שגיאה בחיפוש החכם');
+    } finally {
+      setSearching(false);
+    }
+  };
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchIds(null);
+    setSearchExplanation('');
+  };
+
+  // ---- Resale value estimate -------------------------------------------
+  const estimateResale = async (item: Item) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('estimate-resale-value', {
+        body: {
+          description: item.description,
+          item_type: item.item_type,
+          material_category: item.material_category,
+          condition: item.condition,
+          quantity: item.quantity,
+          estimated_weight_kg: item.estimated_weight_kg,
+          image_url: item.image_url,
+        },
+      });
+      if (error) throw error;
+      const val = Number(data?.estimated_resale_ils ?? 0);
+      await supabase
+        .from('items')
+        .update({ estimated_resale_ils: val } as any)
+        .eq('id', item.id);
+      toast.success(`הערכה: ₪${val}${data?.rationale ? ` · ${data.rationale}` : ''}`);
+      await loadData();
+    } catch (err: any) {
+      console.error('resale estimate failed:', err);
+      toast.error('שגיאה בהערכת שווי');
+    }
+  };
+
+  // ---- Duplicate check after insert (best-effort, non-blocking) --------
+  const runDuplicateCheck = async (newIds: string[]) => {
+    try {
+      const candidates = items.filter(i => newIds.includes(i.id));
+      const recent = items.filter(i => !newIds.includes(i.id)).slice(0, 20).map(i => ({
+        id: i.id, description: i.description, location: i.location,
+        item_type: i.item_type, material_category: i.material_category,
+      }));
+      if (recent.length === 0) return;
+      const warnings = new Map<string, { duplicate_of: string; reason: string }>();
+      for (const c of candidates) {
+        const { data } = await supabase.functions.invoke('check-duplicate-item', {
+          body: {
+            candidate: {
+              description: c.description, location: c.location,
+              item_type: c.item_type, material_category: c.material_category,
+            },
+            recent,
+          },
+        });
+        if (data?.is_duplicate && data?.duplicate_of && data?.confidence >= 0.7) {
+          warnings.set(c.id, { duplicate_of: data.duplicate_of, reason: data.reason });
+          await supabase.from('items').update({ duplicate_of: data.duplicate_of } as any).eq('id', c.id);
+        }
+      }
+      if (warnings.size > 0) setDuplicateWarnings(prev => new Map([...prev, ...warnings]));
+    } catch (err) {
+      console.warn('duplicate check skipped:', err);
+    }
+  };
+
   // Per-item photo attach — triggered by the small Camera icon on each
   // item row. Unlike "צלם" (which creates a NEW item via vision autofill),
   // this just attaches a reference photo to an existing item.
@@ -572,6 +750,7 @@ export default function ApartmentDetail() {
     }
   };
   const filteredItems = items.filter(item => {
+    if (searchIds && !searchIds.has(item.id)) return false;
     if (filter === 'all') return true;
     if (filter === 'collection') return item.intended_for_collection;
     if (filter === 'no_collection') return !item.intended_for_collection;
@@ -610,6 +789,36 @@ export default function ApartmentDetail() {
       </header>
 
       <main className="px-3 sm:px-4 py-4 sm:py-6 w-full">
+        {/* Smart search — natural language filter over items */}
+        <div className="w-full mb-3">
+          <form onSubmit={e => { e.preventDefault(); void runSmartSearch(); }} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute top-1/2 -translate-y-1/2 right-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="חיפוש חכם: ‫רהיטי עץ במצב טוב׳, ‘פריטים מעל 30 קילו׳…"
+                className="pr-9"
+                dir="rtl"
+                disabled={searching}
+              />
+            </div>
+            <Button type="submit" size="sm" disabled={searching || !searchQuery.trim()} className="h-10">
+              {searching ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" /> : 'חפש'}
+            </Button>
+            {searchIds && (
+              <Button type="button" size="sm" variant="ghost" onClick={clearSearch} className="h-10">
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </form>
+          {searchExplanation && searchIds && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              <Sparkles className="inline h-3 w-3 ml-1" />{searchExplanation} · {searchIds.size} תוצאות
+            </p>
+          )}
+        </div>
+
         <div className="w-full -mx-3 sm:mx-0 px-3 sm:px-0 mb-4">
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             <Button variant={filter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('all')} className="h-9 text-xs sm:text-sm whitespace-nowrap flex-shrink-0">
@@ -651,6 +860,19 @@ export default function ApartmentDetail() {
                         {typeof item.ai_confidence === 'number' && item.ai_confidence < 0.6 && (
                           <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
                             יש לאמת
+                          </span>
+                        )}
+                        {item.duplicate_of && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-destructive/20 text-destructive"
+                            title={duplicateWarnings.get(item.id)?.reason ?? 'זוהה ככפילות'}
+                          >
+                            <Copy className="h-2.5 w-2.5" /> כפילות
+                          </span>
+                        )}
+                        {typeof item.estimated_resale_ils === 'number' && item.estimated_resale_ils > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground">
+                            <DollarSign className="h-2.5 w-2.5" /> ₪{item.estimated_resale_ils}
                           </span>
                         )}
                       </div>
@@ -740,7 +962,7 @@ export default function ApartmentDetail() {
             onClick={openCameraPicker}
             size="lg"
             variant={scanning ? 'secondary' : 'outline'}
-            disabled={recording || processing || scanning}
+            disabled={recording || processing || scanning || roomScanning}
             className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
             aria-label="צלם פריט"
             title="צלם פריט (AI)"
@@ -754,6 +976,27 @@ export default function ApartmentDetail() {
               <>
                 <ImagePlus className="h-5 w-5 sm:h-6 sm:w-6" />
                 <span className="hidden sm:inline">צלם</span>
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={openRoomPicker}
+            size="lg"
+            variant={roomScanning ? 'secondary' : 'outline'}
+            disabled={recording || processing || scanning || roomScanning}
+            className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
+            aria-label="סריקת חדר (AI — פריטים מרובים)"
+            title="סריקת חדר — צילום אחד, פריטים מרובים"
+          >
+            {roomScanning ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-muted-foreground"></div>
+                <span className="hidden sm:inline">סורק…</span>
+              </>
+            ) : (
+              <>
+                <Scan className="h-5 w-5 sm:h-6 sm:w-6" />
+                <span className="hidden sm:inline">חדר</span>
               </>
             )}
           </Button>
@@ -780,7 +1023,61 @@ export default function ApartmentDetail() {
           className="hidden"
           onChange={attachPhotoToItem}
         />
+        {/* Hidden input for the room sweep (parse-room-image). */}
+        <input
+          ref={roomInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleRoomImage}
+        />
       </div>
+
+      {/* Room sweep — confirmation modal lets the worker uncheck wrong items before inserting */}
+      <Dialog open={!!roomDetected} onOpenChange={open => { if (!open) setRoomDetected(null); }}>
+        <DialogContent dir="rtl" className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{roomDetected?.length ?? 0} פריטים זוהו בחדר</DialogTitle>
+            <DialogDescription>סמן את הפריטים להוספה לדירה — הסר את מי שלא רלוונטי.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {(roomDetected ?? []).map((it, idx) => {
+              const isOn = roomSelected.has(idx);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    const next = new Set(roomSelected);
+                    if (next.has(idx)) next.delete(idx); else next.add(idx);
+                    setRoomSelected(next);
+                  }}
+                  className={`w-full text-right p-3 rounded-md border transition-colors ${isOn ? 'bg-accent/40 border-accent' : 'bg-muted border-border opacity-60'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`h-5 w-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isOn ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+                      {isOn && <Check className="h-3.5 w-3.5 text-primary-foreground" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">{it.description} {it.quantity > 1 && <span className="text-xs text-muted-foreground">× {it.quantity}</span>}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {[it.location, it.material_category, it.estimated_weight_kg ? `${it.estimated_weight_kg} ק"ג` : null].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-2 justify-end pt-3 border-t">
+            <Button variant="outline" onClick={() => setRoomDetected(null)}>ביטול</Button>
+            <Button onClick={confirmRoomItems} disabled={roomSelected.size === 0}>
+              הוסף {roomSelected.size} פריטים
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Gmail-style undo flyout — appears for 5s after every auto-insert batch. */}
       <UndoFlyout
@@ -869,6 +1166,24 @@ export default function ApartmentDetail() {
             setShowEditDialog(false);
           }} className="w-full">
                 שמור שינויים
+              </Button>
+              {/* AI resale estimate — fetches a Claude-generated ILS estimate */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  if (!editingItem) return;
+                  await estimateResale(editingItem);
+                  setShowEditDialog(false);
+                }}
+                className="w-full gap-2"
+                title="הערכת שווי יד-שנייה באמצעות AI"
+              >
+                <DollarSign className="h-4 w-4" />
+                הערכת שווי (AI)
+                {typeof editingItem.estimated_resale_ils === 'number' && editingItem.estimated_resale_ils > 0 && (
+                  <span className="text-xs text-muted-foreground">· נוכחי: ₪{editingItem.estimated_resale_ils}</span>
+                )}
               </Button>
             </div>}
         </DialogContent>

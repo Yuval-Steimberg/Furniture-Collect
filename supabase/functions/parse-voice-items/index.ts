@@ -80,17 +80,33 @@ serve(async (req) => {
       throw new Error('ANTHROPIC_API_KEY (or LOVABLE_API_KEY) is not configured');
     }
 
-    const parsePrompt = `Parse this Hebrew apartment evacuation inventory into JSON array. Rules:
-1. Quantity: extract numbers (2 כסאות=2), default 1
-2. Location: extract (בסלון, במטבח, etc), default ""
-3. intended_for_collection: false if "לא לקחת", else true
-4. item_type: furniture/appliance/textile/small_item/other
-5. material_category: glass/aluminum/wood/plastic/metal/textile/electrical/other
-6. description: Hebrew, concise
+    // Ask Claude to either extract items OR classify the utterance as a
+    // voice *command* ("סמן את כל הכיסאות כנאספו", "צור דוח לבניין 2").
+    const parsePrompt = `You receive Hebrew speech from a worker using an apartment-evacuation inventory app.
 
-Text: ${transcribedText}
+First classify the utterance:
+  - "items":   the user is describing items present (chairs, sofa, refrigerator, etc.)
+  - "command": the user is issuing an app action (mark as collected, delete, generate report, navigate, etc.)
+  - "unknown": can't tell
 
-Return ONLY valid JSON array, no markdown.`;
+If "items" → return:
+{"kind":"items","items":[{description, quantity, location, intended_for_collection, item_type, material_category}, ...]}
+
+Where:
+- quantity: extract numbers (2 כסאות=2), default 1
+- location: בסלון, במטבח, בחדר שינה, etc., default ""
+- intended_for_collection: false if "לא לקחת" / similar; else true
+- item_type: furniture/appliance/textile/small_item/other
+- material_category: glass/aluminum/wood/plastic/metal/textile/electrical/other
+- description: Hebrew, concise
+
+If "command" → return:
+{"kind":"command","action":"<one of: mark_all_collected | mark_all_not_collected | delete_all_in_location | generate_report | go_to_statistics | unknown>","filter":{"location":"<optional>"}}
+
+Utterance:
+"""${transcribedText}"""
+
+Return ONLY valid JSON, no markdown, no commentary.`;
 
     let parsedContent = '';
     if (ANTHROPIC_API_KEY) {
@@ -128,28 +144,44 @@ Return ONLY valid JSON array, no markdown.`;
       parsedContent = parseResult.choices[0].message.content;
     }
 
-    let items: ParsedItem[];
+    // Parse Claude's response — supports the new {kind, items|action} shape
+    // as well as the legacy bare array.
+    let items: ParsedItem[] = [];
+    let kind: string = "items";
+    let command: Record<string, unknown> | null = null;
     try {
-      const jsonMatch = parsedContent.match(/\[[\s\S]*\]/);
-      items = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(parsedContent);
-    } catch (e) {
-      console.error('Failed to parse JSON:', e);
-      throw new Error('Failed to parse AI response');
+      const cleaned = parsedContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+      const parsedObj = JSON.parse(cleaned);
+      if (parsedObj && typeof parsedObj === "object" && !Array.isArray(parsedObj)) {
+        kind = parsedObj.kind ?? "items";
+        if (kind === "items" && Array.isArray(parsedObj.items)) items = parsedObj.items;
+        else if (kind === "command") command = parsedObj;
+      } else if (Array.isArray(parsedObj)) {
+        items = parsedObj;
+      }
+    } catch (_e) {
+      // Last-ditch: extract the first [...] block from the raw text
+      try {
+        const jsonMatch = parsedContent.match(/\[[\s\S]*\]/);
+        items = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+      } catch (e2) {
+        console.error("Failed to parse JSON. Content:", parsedContent);
+        throw new Error("Failed to parse AI response");
+      }
     }
 
     const totalTime = Date.now() - startTime;
-    console.log(`Successfully processed ${items.length} items in ${totalTime}ms`);
+    console.log(`parse-voice-items kind=${kind} items=${items.length} ms=${totalTime}`);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         transcription: transcribedText,
-        items: items,
-        processingTime: totalTime
+        kind,
+        items,
+        command,
+        processingTime: totalTime,
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
     );
 
   } catch (error) {
