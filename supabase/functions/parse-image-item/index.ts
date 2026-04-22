@@ -86,42 +86,74 @@ serve(async (req: Request) => {
       return jsonError(413, "image too large; max 10MB JPEG");
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return jsonError(500, "LOVABLE_API_KEY not configured on the edge function");
+    // Prefer a direct Anthropic key; fall back to the Lovable gateway key for
+    // backwards compatibility with older deployments.
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    const LOVABLE_API_KEY   = Deno.env.get("LOVABLE_API_KEY");
+    if (!ANTHROPIC_API_KEY && !LOVABLE_API_KEY) {
+      return jsonError(500, "ANTHROPIC_API_KEY (or LOVABLE_API_KEY) not configured on the edge function");
     }
 
-    const userPromptParts: Array<Record<string, unknown>> = [
-      { type: "text", text: VISION_PROMPT + (hint ? `\n\nרמז מהמשתמש: ${hint}` : "") },
-      {
-        type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${image_base64}` },
-      },
-    ];
+    const promptText = VISION_PROMPT + (hint ? `\n\nרמז מהמשתמש: ${hint}` : "");
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "anthropic/claude-sonnet-4.5",
-        messages: [{ role: "user", content: userPromptParts }],
-        // Gateway supports JSON-mode / structured output — ask for JSON only.
-        response_format: { type: "json_object" },
-        max_tokens: 600,
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      return jsonError(502, `AI gateway failed: ${aiResponse.status}`);
+    // Native Anthropic Messages API is preferred. It handles vision natively
+    // and returns a stable { content: [{ type: "text", text }] } shape.
+    let rawContent = "";
+    if (ANTHROPIC_API_KEY) {
+      const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-5",
+          max_tokens: 600,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image_base64 } },
+              { type: "text", text: promptText },
+            ],
+          }],
+        }),
+      });
+      if (!aiResponse.ok) {
+        const errText = await aiResponse.text();
+        console.error("Anthropic error:", aiResponse.status, errText);
+        return jsonError(502, `Anthropic API failed: ${aiResponse.status}`);
+      }
+      const aiJson = await aiResponse.json();
+      rawContent = aiJson?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "";
+    } else {
+      // Fallback: OpenAI-compatible Lovable gateway shape.
+      const userPromptParts: Array<Record<string, unknown>> = [
+        { type: "text", text: promptText },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base64}` } },
+      ];
+      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "anthropic/claude-sonnet-4.5",
+          messages: [{ role: "user", content: userPromptParts }],
+          response_format: { type: "json_object" },
+          max_tokens: 600,
+        }),
+      });
+      if (!aiResponse.ok) {
+        const errText = await aiResponse.text();
+        console.error("AI gateway error:", aiResponse.status, errText);
+        return jsonError(502, `AI gateway failed: ${aiResponse.status}`);
+      }
+      const aiJson = await aiResponse.json();
+      rawContent = aiJson?.choices?.[0]?.message?.content ?? "";
     }
 
-    const aiJson = await aiResponse.json();
-    const rawContent: string = aiJson?.choices?.[0]?.message?.content ?? "";
     if (!rawContent) {
       return jsonError(502, "empty response from vision model");
     }

@@ -31,3 +31,4 @@ dist-ssr
 
 # Lovable workspace leftovers
 .workspace
+.vercel
