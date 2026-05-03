@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
@@ -67,6 +67,9 @@ interface Item {
   material_category: string;
   estimated_weight_kg: number | null;
   image_url: string | null;
+  photo_urls?: string[] | null;
+  status?: string | null;
+  collected_by?: string | null;
   condition?: 'as_new' | 'good' | 'needs_repair' | 'scrap_only' | null;
   ai_confidence?: number | null;
   source?: 'voice' | 'text' | 'image' | 'manual' | null;
@@ -74,12 +77,8 @@ interface Item {
   duplicate_of?: string | null;
   created_by_user_id: string;
   collected_by_user_id: string | null;
-  created_by?: {
-    name: string;
-  };
-  collected_by?: {
-    name: string;
-  };
+  created_by?: { name: string; };
+  collector_profile?: { name: string; };
 }
 interface ParsedItem {
   description: string;
@@ -140,6 +139,11 @@ export default function ApartmentDetail() {
   const [showGuided, setShowGuided] = useState(false);
   const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Collection attribution — "נאסף על ידי מי?"
+  const [showAttributionDialog, setShowAttributionDialog] = useState(false);
+  const [pendingCollectionItemId, setPendingCollectionItemId] = useState<string | null>(null);
+  const [collectorInput, setCollectorInput] = useState('');
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -174,7 +178,7 @@ export default function ApartmentDetail() {
       } = await supabase.from('items').select(`
           *,
           created_by:profiles!items_created_by_user_id_fkey(name),
-          collected_by:profiles!items_collected_by_user_id_fkey(name)
+          collector_profile:profiles!items_collected_by_user_id_fkey(name)
         `).eq('apartment_id', apartmentId).order('created_at', {
         ascending: false
       });
@@ -742,12 +746,17 @@ export default function ApartmentDetail() {
         .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
       if (uploadError) throw uploadError;
       const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
+      const currentItem = items.find(i => i.id === itemId);
+      const existingUrls: string[] = currentItem?.photo_urls?.length
+        ? currentItem.photo_urls
+        : currentItem?.image_url ? [currentItem.image_url] : [];
+      const newUrls = [...existingUrls, publicUrl.publicUrl];
       const { error: updateError } = await supabase
         .from('items')
-        .update({ image_url: publicUrl.publicUrl } as any)
+        .update({ photo_urls: newUrls, image_url: newUrls[0] } as any)
         .eq('id', itemId);
       if (updateError) throw updateError;
-      toast.success('תמונה צורפה לפריט');
+      toast.success(newUrls.length > 1 ? `${newUrls.length} תמונות לפריט` : 'תמונה צורפה לפריט');
       await loadData();
     } catch (err: any) {
       console.error('attach photo failed:', err);
@@ -794,21 +803,19 @@ export default function ApartmentDetail() {
   };
   const updateItem = async (itemId: string, updates: Partial<Item>) => {
     try {
-      // If marking as collected, add the current user as collected_by
-      const updateData: any = {
-        ...updates
-      };
+      const updateData: any = { ...updates };
       if (updates.collected === true && !items.find(i => i.id === itemId)?.collected) {
-        const {
-          data: {
-            user
-          }
-        } = await supabase.auth.getUser();
-        if (user) {
-          updateData.collected_by_user_id = user.id;
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) updateData.collected_by_user_id = user.id;
+        // Sync status column
+        if (!('status' in updates)) updateData.status = 'collected';
       } else if (updates.collected === false) {
         updateData.collected_by_user_id = null;
+        if (!('collected_by' in updates)) updateData.collected_by = null;
+        if (!('status' in updates)) updateData.status = 'pending';
+      }
+      if (updates.status === 'discarded') {
+        updateData.intended_for_collection = false;
       }
       const {
         error
@@ -855,6 +862,34 @@ export default function ApartmentDetail() {
       console.error(error);
     }
   };
+  // Show "נאסף על ידי מי?" dialog before marking collected
+  const requestCollection = (itemId: string) => {
+    const last = localStorage.getItem('fc_last_collector') || '';
+    setCollectorInput(last);
+    setPendingCollectionItemId(itemId);
+    setShowAttributionDialog(true);
+  };
+
+  const confirmCollection = async (skipName = false) => {
+    if (!pendingCollectionItemId) return;
+    setShowAttributionDialog(false);
+    const name = skipName ? '' : collectorInput.trim();
+    if (name) localStorage.setItem('fc_last_collector', name);
+    await updateItem(pendingCollectionItemId, {
+      collected: true,
+      collected_by: name || null,
+    });
+    setPendingCollectionItemId(null);
+    setCollectorInput('');
+  };
+
+  const markDiscarded = async (itemId: string, discarded: boolean) => {
+    await updateItem(itemId, {
+      status: discarded ? 'discarded' : 'pending',
+      collected: false,
+    });
+  };
+
   const deleteItem = async () => {
     if (!deletingItemId) return;
     try {
@@ -896,8 +931,16 @@ export default function ApartmentDetail() {
     });
   })();
 
-  // Collect all item photos in display order for the lightbox.
-  const photoItems = filteredItems.filter(i => !!i.image_url);
+  // Flat list of all photos across items — supports multiple photos per item.
+  const photoItems = filteredItems.flatMap(i => {
+    const urls = i.photo_urls?.length ? i.photo_urls : (i.image_url ? [i.image_url] : []);
+    return urls.map((url, idx) => ({
+      ...i,
+      image_url: url,
+      _photoIdx: idx,
+      description: idx > 0 ? `${i.description} (${idx + 1})` : i.description,
+    }));
+  });
   const getStatusBadge = (status: string) => {
     const badges = {
       'NOT_STARTED': <Badge variant="secondary">לא הושלם</Badge>,
@@ -1069,10 +1112,13 @@ export default function ApartmentDetail() {
                       disabled={bulkMode}
                       collected={item.collected}
                       onDelete={() => { setDeletingItemId(item.id); setShowDeleteDialog(true); }}
-                      onToggleCollected={() => updateItem(item.id, { collected: !item.collected })}
+                      onToggleCollected={() => {
+                        if (!item.collected) requestCollection(item.id);
+                        else updateItem(item.id, { collected: false });
+                      }}
                     >
                     <Card
-                      className={`w-full transition-all ${bulkSelected.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+                      className={`w-full transition-all ${bulkSelected.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''} ${item.status === 'discarded' ? 'opacity-60' : ''}`}
                       onClick={bulkMode ? () => toggleBulk(item.id) : undefined}
                       role={bulkMode ? 'button' : undefined}
                     >
@@ -1085,19 +1131,24 @@ export default function ApartmentDetail() {
                                 {bulkSelected.has(item.id) && <Check className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={3} />}
                               </div>
                             )}
-                            {item.image_url && (
+                            {(item.image_url || (item.photo_urls?.length ?? 0) > 0) && (
                               <button
                                 type="button"
                                 onClick={e => {
                                   if (bulkMode) return;
                                   e.stopPropagation();
-                                  const idx = photoItems.findIndex(p => p.id === item.id);
+                                  const idx = photoItems.findIndex(p => p.id === item.id && (p as any)._photoIdx === 0);
                                   setLightboxIndex(idx >= 0 ? idx : 0);
                                 }}
-                                className="flex-shrink-0 block h-14 w-14 sm:h-16 sm:w-16 rounded-md overflow-hidden border border-border bg-muted"
+                                className="flex-shrink-0 block h-14 w-14 sm:h-16 sm:w-16 rounded-md overflow-hidden border border-border bg-muted relative"
                                 aria-label="הצג תמונת פריט"
                               >
-                                <img src={item.image_url} alt={item.description} className="h-full w-full object-cover" loading="lazy" />
+                                <img src={item.photo_urls?.[0] ?? item.image_url!} alt={item.description} className="h-full w-full object-cover" loading="lazy" />
+                                {(item.photo_urls?.length ?? 0) > 1 && (
+                                  <span className="absolute bottom-0 right-0 bg-foreground/70 text-background text-[9px] px-1 rounded-tl">
+                                    {item.photo_urls!.length}
+                                  </span>
+                                )}
                               </button>
                             )}
                     <div className="flex-1 min-w-0">
@@ -1138,7 +1189,14 @@ export default function ApartmentDetail() {
                       </div>
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 text-xs text-muted-foreground mt-1">
                         {item.created_by && <span className="break-words">הוסף על ידי: {item.created_by.name}</span>}
-                        {item.collected && item.collected_by && <><span>•</span><span className="break-words">נאסף על ידי: {item.collected_by.name}</span></>}
+                        {item.collected && (item.collected_by || item.collector_profile?.name) && (
+                          <><span>•</span><span className="break-words">נאסף על ידי: {item.collected_by || item.collector_profile?.name}</span></>
+                        )}
+                        {item.status === 'discarded' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                            <Ban className="h-2.5 w-2.5" /> נזרק
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
@@ -1151,15 +1209,17 @@ export default function ApartmentDetail() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          if (item.image_url) window.open(item.image_url, '_blank', 'noopener');
-                          else openItemPhotoPicker(item.id);
-                        }}
-                        className={`h-9 w-9 sm:h-10 sm:w-10 ${item.image_url ? '' : 'text-muted-foreground'}`}
-                        aria-label={item.image_url ? 'הצג תמונה' : 'צרף תמונה'}
-                        title={item.image_url ? 'הצג תמונה' : 'צרף תמונה'}
+                        onClick={() => openItemPhotoPicker(item.id)}
+                        className="h-9 w-9 sm:h-10 sm:w-10 relative"
+                        aria-label="הוסף תמונה"
+                        title="הוסף תמונה לפריט"
                       >
-                        <Camera className={`h-4 w-4 ${item.image_url ? 'text-success' : ''}`} />
+                        <Camera className={`h-4 w-4 ${(item.photo_urls?.length ?? (item.image_url ? 1 : 0)) > 0 ? 'text-success' : ''}`} />
+                        {(item.photo_urls?.length ?? 0) > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 bg-primary text-primary-foreground rounded-full text-[8px] flex items-center justify-center leading-none">
+                            {item.photo_urls!.length}
+                          </span>
+                        )}
                       </Button>
                       <Button variant="ghost" size="icon" onClick={() => {
                     setDeletingItemId(item.id);
@@ -1169,19 +1229,37 @@ export default function ApartmentDetail() {
                       </Button>
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 pt-2 border-t">
+                  <div className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 pt-2 border-t ${item.status === 'discarded' ? 'opacity-50' : ''}`}>
                     <div className="flex items-center gap-2 flex-1">
                       <span className="text-xs sm:text-sm whitespace-nowrap">לאיסוף:</span>
-                      <Switch checked={item.intended_for_collection} onCheckedChange={checked => updateItem(item.id, {
-                    intended_for_collection: checked
-                  })} disabled={userRole === 'WORKER'} />
+                      <Switch
+                        checked={item.intended_for_collection}
+                        onCheckedChange={checked => updateItem(item.id, { intended_for_collection: checked })}
+                        disabled={userRole === 'WORKER' || item.status === 'discarded'}
+                      />
                     </div>
-                    {item.intended_for_collection && <div className="flex items-center gap-2 flex-1">
+                    {item.intended_for_collection && item.status !== 'discarded' && (
+                      <div className="flex items-center gap-2 flex-1">
                         <span className="text-xs sm:text-sm whitespace-nowrap">נאסף:</span>
-                        <Switch checked={item.collected} onCheckedChange={checked => updateItem(item.id, {
-                    collected: checked
-                  })} />
-                      </div>}
+                        <Switch
+                          checked={item.collected}
+                          onCheckedChange={checked => {
+                            if (checked) requestCollection(item.id);
+                            else updateItem(item.id, { collected: false });
+                          }}
+                        />
+                      </div>
+                    )}
+                    <Button
+                      variant={item.status === 'discarded' ? 'destructive' : 'ghost'}
+                      size="sm"
+                      onClick={() => markDiscarded(item.id, item.status !== 'discarded')}
+                      className={`h-7 text-xs gap-1 flex-shrink-0 ${item.status !== 'discarded' ? 'text-muted-foreground hover:text-destructive' : ''}`}
+                      title={item.status === 'discarded' ? 'בטל סימון נזרק' : 'סמן כנזרק'}
+                    >
+                      <Ban className="h-3 w-3" />
+                      <span>נזרק</span>
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -1558,6 +1636,38 @@ export default function ApartmentDetail() {
                 </Button>
               </div>
             </div>}
+        </DialogContent>
+      </Dialog>
+
+      {/* Collection Attribution Dialog */}
+      <Dialog open={showAttributionDialog} onOpenChange={open => { if (!open) setShowAttributionDialog(false); }}>
+        <DialogContent dir="rtl" className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5 text-primary" />
+              נאסף על ידי מי?
+            </DialogTitle>
+            <DialogDescription>הזן את שם האוסף לצורך מעקב</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <Input
+              placeholder="שם האוסף"
+              value={collectorInput}
+              onChange={e => setCollectorInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void confirmCollection(); }}
+              autoFocus
+              dir="rtl"
+            />
+            <div className="flex gap-2">
+              <Button onClick={() => void confirmCollection()} className="flex-1" disabled={!collectorInput.trim()}>
+                <Check className="h-4 w-4 ml-2" />
+                אשר
+              </Button>
+              <Button variant="outline" onClick={() => void confirmCollection(true)} className="flex-1">
+                דלג
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

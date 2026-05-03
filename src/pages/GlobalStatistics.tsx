@@ -505,6 +505,13 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
               <div className="text-2xl md:text-3xl font-bold text-emerald-600 dark:text-emerald-400">
                 {aiStats?.collected?.co2_saved_kg?.toFixed(1) || stats?.totalCO2?.toFixed(1) || 0}
               </div>
+              {(() => {
+                const co2 = parseFloat(aiStats?.collected?.co2_saved_kg ?? stats?.totalCO2 ?? 0);
+                const trees = Math.round(co2 / 21);
+                return trees > 0 ? (
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">≈ {trees} עצים/שנה</div>
+                ) : null;
+              })()}
             </CardContent>
           </Card>
         </div>
