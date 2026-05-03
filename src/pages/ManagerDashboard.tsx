@@ -76,7 +76,7 @@ export default function ManagerDashboard() {
       // Load items stats
       const { data: items, error: itemsError } = await supabase
         .from('items')
-        .select('id, quantity, collected, intended_for_collection, project_id');
+        .select('id, quantity, collected, intended_for_collection, project_id, collected_by');
       
       if (itemsError) throw itemsError;
 
@@ -120,9 +120,19 @@ export default function ManagerDashboard() {
         count
       })));
 
-      // Top collectors - will be populated after migration adds collected_by column
-      // For now, show empty state
-      setTopCollectors([]);
+      // Top collectors aggregated from collected_by text field
+      const collectorMap: Record<string, number> = {};
+      items?.forEach(item => {
+        if (item.collected && (item as any).collected_by) {
+          const name = (item as any).collected_by as string;
+          collectorMap[name] = (collectorMap[name] || 0) + item.quantity;
+        }
+      });
+      const collectors = Object.entries(collectorMap)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+      setTopCollectors(collectors);
 
       // Find issues - items that are intended for collection but not collected
       const foundIssues: Issue[] = [];

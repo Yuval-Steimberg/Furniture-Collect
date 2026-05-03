@@ -31,13 +31,6 @@ interface ContextSnapshot {
   user?: { id: string; name: string; org_role: string };
 }
 
-const QUICK_PROMPTS: Array<{ label: string; text: string; icon: string }> = [
-  { icon: '📝', label: 'סיכום לדירה', text: 'נסח לי סיכום מקצועי בעברית של הדירה הזו — משקל כולל, חומרים עיקריים, הערכה של המצב הכללי.' },
-  { icon: '💰', label: 'מודעת Yad2', text: 'הצע לי מודעות Yad2 מוכנות עבור 3 הפריטים הכי שווים למכירה בדירה הזו. לכל אחד: כותרת, תיאור, מחיר מוצע.' },
-  { icon: '🚚', label: 'סדר איסוף חכם', text: 'סדר לי את הפריטים לאיסוף לפי סדר חכם — שקלול של שווי מכירה, משקל ולוגיסטיקה. הסבר קצר למה לקחת כל אחד.' },
-  { icon: '✉️', label: 'WhatsApp ליזם', text: 'נסח לי הודעת WhatsApp קצרה ליזם שמעדכנת אותו על ההתקדמות בפרויקט — כמה דירות הושלמו, כמה טון הוצלו, וכמה CO2 נחסך.' },
-  { icon: '🔍', label: 'מה חסר?', text: 'לפי מה שתיעדנו עד עכשיו, האם יש פריטים טיפוסיים שאולי פיספסנו לתעד בדירה הזו? (לדוגמה רהיטים נפוצים שבדרך כלל מופיעים יחד)' },
-];
 
 export function AIAssistant() {
   const [open, setOpen] = useState(false);
@@ -195,25 +188,15 @@ export function AIAssistant() {
               {/* Messages */}
               <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-3">
                 {messages.length === 0 && (
-                  <div className="space-y-3">
-                    <div className="rounded-lg bg-accent/40 p-3 text-sm leading-relaxed">
-                      שלום. אני חבר לנתונים של <strong>Just A Second</strong>. אני יודע מה בכל הפרויקטים שלך,
-                      כמה טון הוצלו, ומה הסטטוס של כל דירה. תשאל אותי מה שתרצה, או התחל עם אחת מההצעות:
+                  <div className="flex flex-col items-center justify-center h-full py-12 gap-4 text-center px-4">
+                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+                      <Sparkles className="h-7 w-7 text-primary" strokeWidth={1.5} />
                     </div>
-                    <div className="grid grid-cols-1 gap-2">
-                      {QUICK_PROMPTS.map((p, i) => (
-                        <button
-                          key={i}
-                          onClick={() => void send(p.text)}
-                          className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/30 hover:border-accent transition-colors text-right"
-                        >
-                          <span className="text-xl flex-shrink-0">{p.icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-sm">{p.label}</div>
-                            <div className="text-xs text-muted-foreground line-clamp-2">{p.text}</div>
-                          </div>
-                        </button>
-                      ))}
+                    <div>
+                      <p className="font-semibold text-base">עוזר AI</p>
+                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                        שאל אותי על הנתונים שלך — פריטים, סטטיסטיקות, סיכומים, טיוטות הודעות, ועוד.
+                      </p>
                     </div>
                   </div>
                 )}

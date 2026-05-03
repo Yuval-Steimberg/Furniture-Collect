@@ -1,4 +1,4 @@
-import { Home, FolderOpen, BarChart3, Users, LogOut } from 'lucide-react';
+import { Home, FolderOpen, BarChart3, Users, LogOut, LayoutDashboard, Search } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffect, useState } from 'react';
@@ -6,43 +6,30 @@ import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGrou
 export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isOrgAdmin, setIsOrgAdmin] = useState(false);
+  const [orgRole, setOrgRole] = useState<string | null>(null);
   useEffect(() => {
     checkUserRole();
   }, []);
   const checkUserRole = async () => {
     try {
-      const {
-        data: {
-          user
-        }
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const {
-        data: profile
-      } = await supabase.from('profiles').select('org_role').eq('id', user.id).single();
-      setIsOrgAdmin(profile?.org_role === 'ORG_ADMIN');
+      const { data: profile } = await supabase.from('profiles').select('org_role').eq('id', user.id).single();
+      setOrgRole(profile?.org_role ?? null);
     } catch (error) {
       console.error('Error checking user role:', error);
     }
   };
-  const menuItems = [{
-    title: 'דף הבית',
-    url: '/',
-    icon: Home
-  }, {
-    title: 'הפרויקטים שלי',
-    url: '/projects',
-    icon: FolderOpen
-  }, {
-    title: 'סטטיסטיקות כלליות',
-    url: '/global-statistics',
-    icon: BarChart3
-  }, ...(isOrgAdmin ? [{
-    title: 'ניהול משתמשים',
-    url: '/user-management',
-    icon: Users
-  }] : [])];
+  const isAdmin = orgRole === 'ORG_ADMIN';
+  const isManager = orgRole === 'ORG_ADMIN' || orgRole === 'PROJECT_MANAGER';
+  const menuItems = [
+    { title: 'דף הבית', url: '/', icon: Home },
+    { title: 'הפרויקטים שלי', url: '/projects', icon: FolderOpen },
+    { title: 'סטטיסטיקות כלליות', url: '/global-statistics', icon: BarChart3 },
+    { title: 'חוקר נתונים', url: '/data-explorer', icon: Search },
+    ...(isManager ? [{ title: 'לוח בקרה', url: '/manager-dashboard', icon: LayoutDashboard }] : []),
+    ...(isAdmin ? [{ title: 'ניהול משתמשים', url: '/user-management', icon: Users }] : []),
+  ];
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate('/auth');

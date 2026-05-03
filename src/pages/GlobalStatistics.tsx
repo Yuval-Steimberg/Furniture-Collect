@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon, FileSpreadsheet, FileText, FileBarChart } from 'lucide-react';
+import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon, FileSpreadsheet, FileText, FileBarChart, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
 import { generateExecutiveReport } from '@/lib/executiveReportPDF';
 
@@ -114,15 +114,28 @@ export default function GlobalStatistics() {
       const totalWeight = Object.values(materialGroups).reduce((sum: number, g: any) => sum + g.weight, 0);
       const totalCO2 = Object.values(materialGroups).reduce((sum: number, g: any) => sum + g.co2Saved, 0);
 
-      // Prepare chart data with percentages
-      const materialChartData = Object.entries(materialGroups).map(([name, data]: [string, any]) => ({
-        name: CATEGORY_TRANSLATIONS[name] || name,
-        rawName: name,
-        weight: parseFloat(data.weight.toFixed(1)),
-        count: data.count,
-        percentage: totalItems > 0 ? parseFloat(((data.count / totalItems) * 100).toFixed(1)) : 0,
-        co2: parseFloat(data.co2Saved.toFixed(1)),
-      }));
+      // Prepare chart data with percentages — sorted by count desc
+      const materialChartData = Object.entries(materialGroups)
+        .map(([name, data]: [string, any]) => ({
+          name: CATEGORY_TRANSLATIONS[name] || name,
+          rawName: name,
+          weight: parseFloat(data.weight.toFixed(1)),
+          count: data.count,
+          percentage: totalItems > 0 ? parseFloat(((data.count / totalItems) * 100).toFixed(1)) : 0,
+          co2: parseFloat(data.co2Saved.toFixed(1)),
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      // Collector leaderboard from collected_by text field
+      const collectorGroups: Record<string, number> = {};
+      items.forEach((item: any) => {
+        if (item.collected && item.collected_by) {
+          collectorGroups[item.collected_by] = (collectorGroups[item.collected_by] || 0) + item.quantity;
+        }
+      });
+      const collectorStats = Object.entries(collectorGroups)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
 
       setStats({
         totalItems,
@@ -133,9 +146,10 @@ export default function GlobalStatistics() {
         totalCO2,
         materialGroups,
         materialChartData,
+        collectorStats,
         items,
-        collectedItems: items.filter(i => i.collected),
-        notCollectedItems: items.filter(i => !i.collected),
+        collectedItems: items.filter((i: any) => i.collected),
+        notCollectedItems: items.filter((i: any) => !i.collected),
       });
 
       // Calculate AI statistics
@@ -495,6 +509,63 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
           </Card>
         </div>
 
+        {/* Smart Insights */}
+        {stats && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+              <CardContent className="pt-4 pb-4">
+                <div className="text-xs text-muted-foreground mb-1">קטגוריה נפוצה</div>
+                <div className="text-base font-bold truncate">
+                  {stats.materialChartData?.[0]?.name || '—'}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {stats.materialChartData?.[0]?.count || 0} פריטים ({stats.materialChartData?.[0]?.percentage || 0}%)
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={`bg-gradient-to-br border ${
+              Number(collectedPercentage) >= 80
+                ? 'from-green-500/10 to-green-500/5 border-green-300/30 dark:border-green-700/30'
+                : Number(collectedPercentage) >= 50
+                ? 'from-amber-500/10 to-amber-500/5 border-amber-300/30 dark:border-amber-700/30'
+                : 'from-red-500/10 to-red-500/5 border-red-300/30 dark:border-red-700/30'
+            }`}>
+              <CardContent className="pt-4 pb-4">
+                <div className="text-xs text-muted-foreground mb-1">שיעור איסוף</div>
+                <div className={`text-base font-bold ${
+                  Number(collectedPercentage) >= 80 ? 'text-green-600 dark:text-green-400'
+                  : Number(collectedPercentage) >= 50 ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-red-600 dark:text-red-400'
+                }`}>
+                  {collectedPercentage}%
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {stats.collected} מתוך {stats.totalItems} פריטים
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border-purple-300/30 dark:border-purple-700/30">
+              <CardContent className="pt-4 pb-4">
+                <div className="text-xs text-muted-foreground mb-1">האוסף המוביל</div>
+                {stats.collectorStats?.length > 0 ? (
+                  <>
+                    <div className="text-base font-bold text-purple-600 dark:text-purple-400 truncate">
+                      {stats.collectorStats[0].name}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {stats.collectorStats[0].count} פריטים שנאספו
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-muted-foreground mt-1">אין נתונים עדיין</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Category Breakdown with View Toggle */}
         <Card>
           <CardHeader className="pb-3">
@@ -627,6 +698,96 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
             {(!stats?.materialChartData || stats.materialChartData.length === 0) && (
               <div className="text-center py-4 text-muted-foreground">
                 אין נתונים להצגה
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        {/* Collector Leaderboard */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              איסוף לפי עובדים
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(!stats?.collectorStats || stats.collectorStats.length === 0) ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <p className="font-medium">אין נתוני איסוף עדיין</p>
+                <p className="text-xs mt-1">נתונים יופיעו כאשר פריטים יסומנו כנאספו עם שם האוסף</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-4 text-sm border-b pb-3">
+                  <span className="text-muted-foreground">
+                    מוביל: <strong className="text-foreground">{stats.collectorStats[0].name}</strong>
+                    {' '}({stats.collectorStats[0].count} פריטים)
+                  </span>
+                  <span className="text-muted-foreground">
+                    ממוצע לעובד:{' '}
+                    <strong className="text-foreground">
+                      {Math.round(
+                        stats.collectorStats.reduce((s: number, c: any) => s + c.count, 0) /
+                        stats.collectorStats.length
+                      )}
+                    </strong>{' '}פריטים
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {stats.collectorStats.slice(0, 8).map((c: any, i: number) => (
+                    <div key={c.name} className="flex items-center gap-3">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
+                        i === 0 ? 'bg-yellow-500' : i === 1 ? 'bg-slate-400' : i === 2 ? 'bg-amber-700' : 'bg-muted-foreground/60'
+                      }`}>
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium truncate">{c.name}</span>
+                          <span className="text-sm font-semibold ml-2 flex-shrink-0">{c.count}</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-1.5">
+                          <div
+                            className="h-1.5 rounded-full bg-primary transition-all"
+                            style={{ width: `${(c.count / stats.collectorStats[0].count) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {stats.collectorStats.length > 1 && (
+                  <ResponsiveContainer
+                    width="100%"
+                    height={Math.max(160, Math.min(8, stats.collectorStats.length) * 36 + 20)}
+                  >
+                    <BarChart
+                      data={stats.collectorStats.slice(0, 8)}
+                      layout="vertical"
+                      margin={{ top: 2, right: 50, left: 16, bottom: 2 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.4} />
+                      <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        orientation="right"
+                        width={90}
+                        tick={{ fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 12 }} />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                        {stats.collectorStats.slice(0, 8).map((_: any, index: number) => (
+                          <Cell key={`col-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             )}
           </CardContent>

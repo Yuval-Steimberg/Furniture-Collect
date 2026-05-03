@@ -31,7 +31,7 @@ import {
   Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
@@ -498,38 +498,61 @@ export default function DataExplorer() {
 
             {/* Chart Display */}
             {groupBy !== 'none' && chartType !== 'none' && groupedData.length > 0 && (
-              <div className="mt-4 h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  {chartType === 'bar' ? (
-                    <BarChart data={groupedData.slice(0, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                      <Tooltip />
-                      <Bar dataKey={metric} fill="#3B82F6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  ) : (
-                    <PieChart>
-                      <Pie
-                        data={groupedData.slice(0, 8)}
-                        dataKey={metric}
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        innerRadius={50}
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                        labelLine={false}
-                      >
-                        {groupedData.slice(0, 8).map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  )}
-                </ResponsiveContainer>
+              <div className="mt-4">
+                {chartType === 'bar' ? (
+                  <div style={{ height: Math.max(240, Math.min(10, groupedData.length) * 40 + 30) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={groupedData.slice(0, 10)} layout="vertical" margin={{ top: 4, right: 60, left: 16, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.4} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 12 }} />
+                        <Bar dataKey={metric} radius={[0, 5, 5, 0]} barSize={22}>
+                          {groupedData.slice(0, 10).map((_, index) => (
+                            <Cell key={`bar-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie
+                          data={groupedData.slice(0, 8)}
+                          dataKey={metric}
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={90}
+                          innerRadius={45}
+                          paddingAngle={2}
+                          strokeWidth={0}
+                        >
+                          {groupedData.slice(0, 8).map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2 px-2">
+                      {(() => {
+                        const total = groupedData.slice(0, 8).reduce((s, d) => s + (d[metric] || 0), 0);
+                        return groupedData.slice(0, 8).map((d, index) => (
+                          <div key={d.name} className="flex items-center gap-1.5">
+                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                            <span className="text-sm font-medium">{d.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({total > 0 ? ((d[metric] / total) * 100).toFixed(0) : 0}%)
+                            </span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
