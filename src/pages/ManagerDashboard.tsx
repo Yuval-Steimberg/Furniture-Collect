@@ -73,26 +73,38 @@ export default function ManagerDashboard() {
     try {
       setLoading(true);
 
-      // Load items stats
+      // Load items stats — select only columns that definitely exist in all DB versions
       const { data: items, error: itemsError } = await supabase
         .from('items')
-        .select('id, quantity, collected, intended_for_collection, project_id, collected_by');
-      
+        .select('id, quantity, collected, intended_for_collection, project_id');
+
       if (itemsError) throw itemsError;
 
       // Load apartments
       const { data: apartments, error: apartmentsError } = await supabase
         .from('apartments')
         .select('id, status, project_id');
-      
+
       if (apartmentsError) throw apartmentsError;
 
       // Load projects
       const { data: projects, error: projectsError } = await supabase
         .from('projects')
         .select('id, name');
-      
+
       if (projectsError) throw projectsError;
+
+      // Load collector attribution separately — collected_by TEXT may not exist in older DB versions
+      let collectorItems: { collected: boolean; quantity: number; collected_by?: string; collector_profile?: { name: string } | null }[] = [];
+      try {
+        const { data: cData } = await supabase
+          .from('items')
+          .select('collected, quantity, collected_by, collector_profile:profiles!items_collected_by_user_id_fkey(name)')
+          .eq('collected', true);
+        collectorItems = cData || [];
+      } catch {
+        // Column or relation doesn't exist yet — collector stats will stay empty
+      }
 
       // Calculate stats
       const totalItems = items?.reduce((sum, i) => sum + i.quantity, 0) || 0;
@@ -120,11 +132,11 @@ export default function ManagerDashboard() {
         count
       })));
 
-      // Top collectors aggregated from collected_by text field
+      // Top collectors — use collected_by text field, fall back to profile name
       const collectorMap: Record<string, number> = {};
-      items?.forEach(item => {
-        if (item.collected && (item as any).collected_by) {
-          const name = (item as any).collected_by as string;
+      collectorItems.forEach(item => {
+        const name = item.collected_by || (item.collector_profile as any)?.name;
+        if (name) {
           collectorMap[name] = (collectorMap[name] || 0) + item.quantity;
         }
       });

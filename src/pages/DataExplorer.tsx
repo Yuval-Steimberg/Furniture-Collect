@@ -18,18 +18,30 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { 
-  Search, 
-  Filter, 
-  Download, 
-  BarChart3, 
+import {
+  Search,
+  Filter,
+  Download,
+  BarChart3,
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FileSpreadsheet,
   FileText,
+  FileBarChart,
+  File,
+  Loader2,
   Layers
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
@@ -294,20 +306,28 @@ export default function DataExplorer() {
               <Search className="h-6 w-6 text-primary" />
               <h1 className="text-xl md:text-2xl font-bold">חוקר נתונים</h1>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5">
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">CSV</span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-1.5">
-                <FileSpreadsheet className="h-4 w-4" />
-                <span className="hidden sm:inline">Excel</span>
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleExportPDF} className="gap-1.5">
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">PDF</span>
-              </Button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  ייצוא
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52" dir="rtl">
+                <DropdownMenuLabel>בחר פורמט</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleExportCSV} className="gap-2">
+                  <File className="h-4 w-4" /> CSV — נתונים גולמיים
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" /> Excel — גיליונות
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF} className="gap-2">
+                  <FileText className="h-4 w-4" /> PDF — סיכום
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -332,7 +352,7 @@ export default function DataExplorer() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">פרויקט</Label>
                 <Select value={selectedProject} onValueChange={setSelectedProject}>
@@ -449,11 +469,11 @@ export default function DataExplorer() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">קבץ לפי</Label>
                 <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupByOption)}>
-                  <SelectTrigger className="w-[140px] h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -470,7 +490,7 @@ export default function DataExplorer() {
               <div className="space-y-1.5">
                 <Label className="text-xs">מדד</Label>
                 <Select value={metric} onValueChange={(v) => setMetric(v as MetricOption)}>
-                  <SelectTrigger className="w-[120px] h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -484,7 +504,7 @@ export default function DataExplorer() {
               <div className="space-y-1.5">
                 <Label className="text-xs">סוג גרף</Label>
                 <Select value={chartType} onValueChange={(v) => setChartType(v as ChartType)}>
-                  <SelectTrigger className="w-[120px] h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -559,11 +579,11 @@ export default function DataExplorer() {
         </Card>
 
         {/* Results Summary */}
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>נמצאו {filteredItems.length} פריטים</span>
-          <span>
-            סה"כ: {filteredItems.reduce((sum, i) => sum + i.quantity, 0)} יחידות | 
-            {filteredItems.reduce((sum, i) => sum + (i.estimated_weight_kg || 0) * i.quantity, 0).toFixed(1)} ק"ג | 
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm text-muted-foreground">
+          <span className="font-medium">נמצאו {filteredItems.length} פריטים</span>
+          <span className="text-xs sm:text-sm">
+            {filteredItems.reduce((sum, i) => sum + i.quantity, 0)} יחידות ·{' '}
+            {filteredItems.reduce((sum, i) => sum + (i.estimated_weight_kg || 0) * i.quantity, 0).toFixed(1)} ק"ג ·{' '}
             ₪{filteredItems.reduce((sum, i) => sum + (i.estimated_resale_ils || 0) * i.quantity, 0).toLocaleString()}
           </span>
         </div>
@@ -571,8 +591,8 @@ export default function DataExplorer() {
         {/* Data Table */}
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="overflow-x-auto -mx-px">
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="cursor-pointer" onClick={() => handleSort('description')}>

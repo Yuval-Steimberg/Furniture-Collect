@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon, FileSpreadsheet, FileText, FileBarChart, Users } from 'lucide-react';
+import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon, FileSpreadsheet, FileText, FileBarChart, File, ChevronDown, Users } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
@@ -300,64 +301,32 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl md:text-2xl font-bold">סטטיסטיקות כלליות</h1>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleExportCSV} 
-                disabled={!!exporting}
-                className="gap-1.5"
-                title="ייצוא CSV"
-              >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">CSV</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleExportExcel} 
-                disabled={!!exporting}
-                className="gap-1.5"
-                title="ייצוא Excel"
-              >
-                {exporting === 'excel' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileSpreadsheet className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">Excel</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleExportPDF} 
-                disabled={!!exporting}
-                className="gap-1.5"
-                title="ייצוא PDF"
-              >
-                {exporting === 'pdf' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">PDF</span>
-              </Button>
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={handleExportExecutive} 
-                disabled={!!exporting}
-                className="gap-1.5 bg-primary"
-                title="דוח מנהלים מקצועי"
-              >
-                {exporting === 'executive' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileBarChart className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">דוח מנהלים</span>
-              </Button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2" disabled={!!exporting}>
+                  {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  ייצוא
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56" dir="rtl">
+                <DropdownMenuLabel>בחר פורמט</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleExportCSV} disabled={!!exporting} className="gap-2">
+                  <File className="h-4 w-4" /> CSV — נתונים גולמיים
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} disabled={!!exporting} className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" /> Excel — גיליונות מרובים
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF} disabled={!!exporting} className="gap-2">
+                  <FileText className="h-4 w-4" /> PDF — סיכום
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleExportExecutive} disabled={!!exporting} className="gap-2 text-primary font-semibold">
+                  <FileBarChart className="h-4 w-4" /> דוח מנהלים מקצועי
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
