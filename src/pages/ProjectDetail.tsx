@@ -4,8 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package } from 'lucide-react';
+import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package, Search, ChevronsDownUp, ChevronsUpDown, X } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonProjectCard } from '@/components/SkeletonCard';
 import { toast } from 'sonner';
@@ -46,6 +47,7 @@ export default function ProjectDetail() {
   const [openBuildings, setOpenBuildings] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [aptSearch, setAptSearch] = useState('');
 
   useEffect(() => {
     loadData();
@@ -144,19 +146,32 @@ export default function ProjectDetail() {
   const isApartmentDone = (apt: Apartment) => apt.pendingForCollection === 0;
 
   const filteredBuildings = useMemo(() => {
-    if (filterMode === 'all') return buildings;
+    const aq = aptSearch.trim().toLowerCase();
     return buildings
       .map(b => ({
         ...b,
         apartments: b.apartments.filter(apt => {
-          const done = isApartmentDone(apt);
-          return filterMode === 'pending' ? !done : done;
+          const matchFilter =
+            filterMode === 'all' ||
+            (filterMode === 'pending' && !isApartmentDone(apt)) ||
+            (filterMode === 'done' && isApartmentDone(apt));
+          const matchSearch = !aq || apt.apartment_number.toLowerCase().includes(aq);
+          return matchFilter && matchSearch;
         }),
       }))
       .filter(b => b.apartments.length > 0);
-  }, [buildings, filterMode]);
+  }, [buildings, filterMode, aptSearch]);
 
   const totalPending = buildings.reduce((s, b) => s + b.pendingForCollection, 0);
+  const totalApts = buildings.reduce((s, b) => s + b.totalApartments, 0);
+  const totalCompleted = buildings.reduce((s, b) => s + b.completedApartments, 0);
+
+  const allExpanded = filteredBuildings.every(b => openBuildings[b.building_number]);
+  const toggleExpandAll = () => {
+    const next: Record<string, boolean> = {};
+    filteredBuildings.forEach(b => { next[b.building_number] = !allExpanded; });
+    setOpenBuildings(prev => ({ ...prev, ...next }));
+  };
 
   if (loading) {
     return (
@@ -190,7 +205,7 @@ export default function ProjectDetail() {
       <header className="bg-sidebar text-sidebar-foreground shadow-md">
         <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/projects')} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/projects')} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0">
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
             <div className="flex-1 min-w-0">
@@ -210,56 +225,67 @@ export default function ProjectDetail() {
       </header>
 
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4">
+        {/* Summary stats */}
+        {buildings.length > 0 && (
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="bg-card border border-border rounded-xl px-3 py-2.5 text-center">
+              <div className="text-xl font-extrabold tabular-nums">{totalApts}</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">דירות</div>
+            </div>
+            <div className="bg-card border border-border rounded-xl px-3 py-2.5 text-center">
+              <div className="text-xl font-extrabold tabular-nums text-green-600 dark:text-green-400">{totalCompleted}</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">הושלמו</div>
+            </div>
+            <div className="bg-card border border-border rounded-xl px-3 py-2.5 text-center">
+              <div className={`text-xl font-extrabold tabular-nums ${totalPending > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>{totalPending}</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">ממתינים</div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-lg sm:text-xl font-bold">בניינים ודירות</h2>
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button
-              onClick={() => navigate(`/projects/${projectId}/report`)}
-              size="sm"
-              variant="outline"
-              className="gap-2 flex-1 sm:flex-none h-10 sm:h-9"
-              title="הפק דוח קיימות"
-            >
-              <FileText className="h-4 w-4" />
-              <span>דוח קיימות</span>
+            <Button onClick={() => navigate(`/projects/${projectId}/report`)} size="sm" variant="outline" className="gap-2 flex-1 sm:flex-none h-10 sm:h-9">
+              <FileText className="h-4 w-4" /><span>דוח קיימות</span>
             </Button>
             <Button onClick={() => navigate(`/projects/${projectId}/apartments/new`)} size="sm" className="gap-2 flex-1 sm:flex-none h-10 sm:h-9">
-              <Plus className="h-4 w-4" />
-              הוסף בניין
+              <Plus className="h-4 w-4" />הוסף בניין
             </Button>
           </div>
         </div>
 
-        {/* Filter buttons */}
+        {/* Search + filter + expand-all */}
         {buildings.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <Button
-              size="sm"
-              variant={filterMode === 'all' ? 'default' : 'outline'}
-              onClick={() => setFilterMode('all')}
-              className="h-9"
-            >
-              הכל
-            </Button>
-            <Button
-              size="sm"
-              variant={filterMode === 'pending' ? 'default' : 'outline'}
-              onClick={() => setFilterMode('pending')}
-              className="h-9 gap-1.5"
-            >
-              לאיסוף
-              {totalPending > 0 && (
-                <Badge variant="secondary" className="h-5 px-1.5">{totalPending}</Badge>
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute top-1/2 -translate-y-1/2 right-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={aptSearch}
+                onChange={e => setAptSearch(e.target.value)}
+                placeholder="חיפוש מספר דירה…"
+                className="pr-9 h-9"
+                dir="rtl"
+              />
+              {aptSearch && (
+                <button onClick={() => setAptSearch('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1">
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
-            </Button>
-            <Button
-              size="sm"
-              variant={filterMode === 'done' ? 'default' : 'outline'}
-              onClick={() => setFilterMode('done')}
-              className="h-9"
-            >
-              הושלמו
-            </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant={filterMode === 'all' ? 'default' : 'outline'} onClick={() => setFilterMode('all')} className="h-9">הכל</Button>
+              <Button size="sm" variant={filterMode === 'pending' ? 'default' : 'outline'} onClick={() => setFilterMode('pending')} className="h-9 gap-1.5">
+                לאיסוף{totalPending > 0 && <Badge variant="secondary" className="h-5 px-1.5">{totalPending}</Badge>}
+              </Button>
+              <Button size="sm" variant={filterMode === 'done' ? 'default' : 'outline'} onClick={() => setFilterMode('done')} className="h-9">הושלמו</Button>
+              {filteredBuildings.length > 1 && (
+                <Button size="sm" variant="outline" onClick={toggleExpandAll} className="h-9 gap-1.5 hidden sm:flex">
+                  {allExpanded ? <ChevronsDownUp className="h-3.5 w-3.5" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
+                  {allExpanded ? 'כווץ' : 'פתח הכל'}
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -267,13 +293,15 @@ export default function ProjectDetail() {
           <Card>
             <CardContent className="p-0">
               <EmptyState
-                icon={Building2}
-                title={buildings.length === 0 ? 'אין דירות בפרויקט' : 'אין תוצאות לסינון'}
+                icon={aptSearch ? Search : Building2}
+                title={buildings.length === 0 ? 'אין דירות בפרויקט' : aptSearch ? `אין דירות עם מספר "${aptSearch}"` : 'אין תוצאות לסינון'}
                 description={buildings.length === 0
                   ? 'הוסף את הבניין הראשון כדי להתחיל לתעד דירות בפינוי.'
-                  : 'נסה לשנות את הסינון.'}
-                actionLabel={buildings.length === 0 ? 'הוסף בניין' : undefined}
-                onAction={buildings.length === 0 ? () => navigate(`/projects/${projectId}/apartments/new`) : undefined}
+                  : 'נסה לשנות את החיפוש או הסינון.'}
+                actionLabel={buildings.length === 0 ? 'הוסף בניין' : aptSearch ? 'נקה חיפוש' : undefined}
+                onAction={buildings.length === 0
+                  ? () => navigate(`/projects/${projectId}/apartments/new`)
+                  : aptSearch ? () => setAptSearch('') : undefined}
               />
             </CardContent>
           </Card>

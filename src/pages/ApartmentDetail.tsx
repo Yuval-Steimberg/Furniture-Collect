@@ -980,6 +980,21 @@ export default function ApartmentDetail() {
             </div>
           </div>
         </div>
+        {/* Thin progress strip at bottom of header — updates live as items are collected */}
+        {!loading && (() => {
+          const forCollection = items.filter(i => i.intended_for_collection && i.status !== 'discarded');
+          const collectedCount = forCollection.filter(i => i.collected).length;
+          const pct = forCollection.length > 0 ? (collectedCount / forCollection.length) * 100 : 0;
+          const allDone = forCollection.length > 0 && collectedCount === forCollection.length;
+          return (
+            <div className="h-1 w-full bg-sidebar-foreground/20">
+              <div
+                className={`h-full transition-all duration-700 ease-out ${allDone ? 'bg-emerald-400' : 'bg-primary'}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          );
+        })()}
       </header>
 
       <main className="px-3 sm:px-4 py-4 sm:py-6 w-full">
@@ -1013,6 +1028,31 @@ export default function ApartmentDetail() {
           )}
         </div>
 
+        {/* Quick stats strip */}
+        {items.length > 0 && (() => {
+          const forCollection = items.filter(i => i.intended_for_collection && i.status !== 'discarded');
+          const collectedCount = forCollection.filter(i => i.collected).length;
+          const pendingCount = forCollection.length - collectedCount;
+          const pct = forCollection.length > 0 ? Math.round((collectedCount / forCollection.length) * 100) : 0;
+          const allDone = forCollection.length > 0 && collectedCount === forCollection.length;
+          return (
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="bg-card border border-border rounded-xl px-3 py-2 text-center">
+                <div className="text-lg font-extrabold tabular-nums">{forCollection.length}</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">לאיסוף</div>
+              </div>
+              <div className="bg-card border border-border rounded-xl px-3 py-2 text-center">
+                <div className={`text-lg font-extrabold tabular-nums ${allDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-green-600 dark:text-green-400'}`}>{collectedCount}</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">נאספו · {pct}%</div>
+              </div>
+              <div className="bg-card border border-border rounded-xl px-3 py-2 text-center">
+                <div className={`text-lg font-extrabold tabular-nums ${pendingCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>{pendingCount}</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">ממתינים</div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="w-full -mx-3 sm:mx-0 px-3 sm:px-0 mb-4">
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             <Button variant={filter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('all')} className="h-9 text-xs sm:text-sm whitespace-nowrap flex-shrink-0">
@@ -1021,7 +1061,6 @@ export default function ApartmentDetail() {
             <Button variant={filter === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('pending')} className="h-9 text-xs sm:text-sm whitespace-nowrap flex-shrink-0">
               ממתין לאיסוף ({items.filter(i => i.intended_for_collection && !i.collected).length})
             </Button>
-            
             <Button variant={filter === 'no_collection' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('no_collection')} className="h-9 text-xs sm:text-sm whitespace-nowrap flex-shrink-0">רק תיעוד ({items.filter(i => !i.intended_for_collection).length})
             </Button>
           </div>

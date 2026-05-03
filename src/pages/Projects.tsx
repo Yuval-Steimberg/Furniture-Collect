@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { HardHat, Plus, LogOut, Building2, MapPin, Calendar, User, MoreVertical, Edit2, Trash2, Archive, ArchiveRestore, LayoutGrid, List } from 'lucide-react';
+import { HardHat, Plus, LogOut, Building2, MapPin, Calendar, User, MoreVertical, Edit2, Trash2, Archive, ArchiveRestore, LayoutGrid, List, Search, TrendingUp, Package, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Session } from '@supabase/supabase-js';
 import { EmptyState } from '@/components/EmptyState';
@@ -53,6 +53,10 @@ export default function Projects() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
+  // Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
@@ -74,6 +78,22 @@ export default function Projects() {
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  // Cmd/Ctrl+K → focus search; Cmd/Ctrl+N → new project (admin only)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n' && profile?.org_role === 'ORG_ADMIN') {
+        e.preventDefault();
+        navigate('/projects/new');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [profile, navigate]);
 
   const loadUserData = async (userId: string) => {
     try {
@@ -210,8 +230,21 @@ export default function Projects() {
     }
   };
 
-  const activeProjects = projects.filter(p => !p.archived);
-  const archivedProjects = projects.filter(p => p.archived);
+  const q = searchQuery.trim().toLowerCase();
+  const matchProject = (p: Project) =>
+    !q ||
+    p.name.toLowerCase().includes(q) ||
+    p.city.toLowerCase().includes(q) ||
+    p.developer_name.toLowerCase().includes(q);
+
+  const activeProjects = projects.filter(p => !p.archived && matchProject(p));
+  const archivedProjects = projects.filter(p => p.archived && matchProject(p));
+
+  // Global stats strip
+  const totalPendingItems = projects.reduce((s, p) => s + ((p.items_to_collect ?? 0) - (p.items_collected ?? 0)), 0);
+  const totalCollectedItems = projects.reduce((s, p) => s + (p.items_collected ?? 0), 0);
+  const totalApartments = projects.reduce((s, p) => s + (p.apartment_count ?? 0), 0);
+  const totalCompleted = projects.reduce((s, p) => s + (p.completed_count ?? 0), 0);
 
   const renderProjectCard = (project: Project) => {
     const aptProgress = project.apartment_count > 0
@@ -260,21 +293,21 @@ export default function Projects() {
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-0 w-auto">
-                  <DropdownMenuItem onClick={(e) => openEditDialog(project, e as any)} className="justify-center px-3">
-                    <Edit2 className="h-4 w-4" />
+                <DropdownMenuContent align="start" dir="rtl">
+                  <DropdownMenuItem onClick={(e) => openEditDialog(project, e as any)} className="gap-2">
+                    <Edit2 className="h-4 w-4" /> עריכה
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={(e) => toggleArchive(project, e as any)} className="justify-center px-3">
-                    {project.archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                  <DropdownMenuItem onClick={(e) => toggleArchive(project, e as any)} className="gap-2">
+                    {project.archived ? <><ArchiveRestore className="h-4 w-4" /> הוצא מארכיון</> : <><Archive className="h-4 w-4" /> העבר לארכיון</>}
                   </DropdownMenuItem>
                   {profile?.org_role === 'ORG_ADMIN' && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={(e) => openDeleteDialog(project, e as any)}
-                        className="text-destructive focus:text-destructive justify-center px-3"
+                        className="text-destructive focus:text-destructive gap-2"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" /> מחק פרויקט
                       </DropdownMenuItem>
                     </>
                   )}
@@ -305,8 +338,8 @@ export default function Projects() {
                 <span className="text-xs text-muted-foreground">דירות</span>
                 <span className="text-xs font-bold tabular-nums">{project.completed_count}/{project.apartment_count}</span>
               </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-accent-foreground/70 transition-all" style={{ width: `${aptProgress}%` }} />
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${aptProgress === 100 ? 'bg-green-500' : 'bg-primary'}`} style={{ width: `${aptProgress}%` }} />
               </div>
             </div>
             {itemsTotal > 0 && (
@@ -315,8 +348,8 @@ export default function Projects() {
                   <span className="text-xs text-muted-foreground">פריטים לאיסוף</span>
                   <span className="text-xs font-bold tabular-nums">{itemsDone}/{itemsTotal}</span>
                 </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all" style={{ width: `${itemProgress}%` }} />
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${itemProgress === 100 ? 'bg-green-500' : 'bg-emerald-500'}`} style={{ width: `${itemProgress}%` }} />
                 </div>
               </div>
             )}
@@ -391,25 +424,21 @@ export default function Projects() {
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-0 w-auto">
-                  <DropdownMenuItem onClick={(e) => openEditDialog(project, e as any)} className="justify-center px-3">
-                    <Edit2 className="h-4 w-4" />
+                <DropdownMenuContent align="start" dir="rtl">
+                  <DropdownMenuItem onClick={(e) => openEditDialog(project, e as any)} className="gap-2">
+                    <Edit2 className="h-4 w-4" /> עריכה
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={(e) => toggleArchive(project, e as any)} className="justify-center px-3">
-                    {project.archived ? (
-                      <ArchiveRestore className="h-4 w-4" />
-                    ) : (
-                      <Archive className="h-4 w-4" />
-                    )}
+                  <DropdownMenuItem onClick={(e) => toggleArchive(project, e as any)} className="gap-2">
+                    {project.archived ? <><ArchiveRestore className="h-4 w-4" /> הוצא מארכיון</> : <><Archive className="h-4 w-4" /> העבר לארכיון</>}
                   </DropdownMenuItem>
                   {profile?.org_role === 'ORG_ADMIN' && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         onClick={(e) => openDeleteDialog(project, e as any)}
-                        className="text-destructive focus:text-destructive justify-center px-3"
+                        className="text-destructive focus:text-destructive gap-2"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" /> מחק פרויקט
                       </DropdownMenuItem>
                     </>
                   )}
@@ -465,13 +494,58 @@ export default function Projects() {
       </header>
 
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+        {/* Page title + new project */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 sm:mb-5">
           <h2 className="text-xl sm:text-2xl font-bold">הפרויקטים שלי</h2>
           {profile?.org_role === 'ORG_ADMIN' && (
             <Button onClick={() => navigate('/projects/new')} className="gap-2 w-full sm:w-auto h-11 sm:h-10">
               <Plus className="h-4 w-4" />
-              פרויקט חדש
+              <span>פרויקט חדש</span>
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] opacity-60 border border-primary-foreground/30 rounded px-1 py-0.5 ml-1">⌘N</kbd>
             </Button>
+          )}
+        </div>
+
+        {/* Stats strip */}
+        {projects.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 sm:mb-5">
+            {[
+              { icon: Building2, label: 'פרויקטים פעילים', value: projects.filter(p => !p.archived).length, color: 'text-primary' },
+              { icon: TrendingUp, label: 'דירות שהושלמו', value: `${totalCompleted}/${totalApartments}`, color: 'text-green-600 dark:text-green-400' },
+              { icon: Package, label: 'ממתין לאיסוף', value: totalPendingItems, color: 'text-amber-600 dark:text-amber-400' },
+              { icon: CheckCircle2, label: 'פריטים נאספו', value: totalCollectedItems, color: 'text-emerald-600 dark:text-emerald-400' },
+            ].map(({ icon: Icon, label, value, color }) => (
+              <div key={label} className="bg-card border border-border rounded-xl px-3 py-2.5 flex items-center gap-2.5">
+                <Icon className={`h-4 w-4 flex-shrink-0 ${color}`} strokeWidth={1.75} />
+                <div className="min-w-0">
+                  <div className={`text-lg font-extrabold tabular-nums leading-tight ${color}`}>{value}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">{label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Search bar */}
+        <div className="relative mb-4">
+          <Search className="absolute top-1/2 -translate-y-1/2 right-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <input
+            ref={searchRef}
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="חיפוש לפי שם, עיר, יזם…"
+            dir="rtl"
+            className="w-full h-10 pr-9 pl-10 rounded-lg border border-input bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <kbd className="absolute left-3 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-0.5 text-[10px] text-muted-foreground border border-border rounded px-1 py-0.5">⌘K</kbd>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute left-8 sm:left-16 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              ✕
+            </button>
           )}
         </div>
 
@@ -512,11 +586,11 @@ export default function Projects() {
               <Card>
                 <CardContent className="p-0">
                   <EmptyState
-                    icon={Building2}
-                    title="אין פרויקטים פעילים"
-                    description="צור פרויקט ראשון כדי להתחיל לתעד דירות בפינוי."
-                    actionLabel="צור פרויקט"
-                    onAction={() => navigate('/projects/new')}
+                    icon={searchQuery ? Search : Building2}
+                    title={searchQuery ? `אין תוצאות עבור "${searchQuery}"` : 'אין פרויקטים פעילים'}
+                    description={searchQuery ? 'נסה לחפש בצורה אחרת.' : 'צור פרויקט ראשון כדי להתחיל לתעד דירות בפינוי.'}
+                    actionLabel={searchQuery ? 'נקה חיפוש' : 'צור פרויקט'}
+                    onAction={searchQuery ? () => setSearchQuery('') : () => navigate('/projects/new')}
                   />
                 </CardContent>
               </Card>
