@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
@@ -114,6 +114,7 @@ export default function ApartmentDetail() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const itemPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const roomInputRef = useRef<HTMLInputElement | null>(null);
+  const multiUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
   const [roomScanning, setRoomScanning] = useState(false);
   const [photoingItemId, setPhotoingItemId] = useState<string | null>(null);
@@ -149,6 +150,10 @@ export default function ApartmentDetail() {
   // Bulk collect attribution
   const [showBulkCollectDialog, setShowBulkCollectDialog] = useState(false);
   const [bulkCollectorInput, setBulkCollectorInput] = useState('');
+
+  // Multi-photo gallery upload (creates new items)
+  const [multiUploading, setMultiUploading] = useState(false);
+  const [multiUploadProgress, setMultiUploadProgress] = useState<{ current: number; total: number } | null>(null);
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -503,6 +508,84 @@ export default function ApartmentDetail() {
       toast.success(`${count} תמונות נוספו בהצלחה`);
     }
   };
+
+  // ---- Multi-gallery upload (select many photos → each creates a new item via AI) ----
+  const openMultiUploadPicker = () => {
+    if (scanning || processing || recording || multiUploading || roomScanning) return;
+    multiUploadInputRef.current?.click();
+  };
+
+  const handleMultiUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+    if (e.target) e.target.value = '';
+    if (files.length === 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setMultiUploading(true);
+    setMultiUploadProgress({ current: 0, total: files.length });
+    const newIds: string[] = [];
+    let successCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      setMultiUploadProgress({ current: i + 1, total: files.length });
+      try {
+        const compressed = await compressImageToJpeg(files[i], 1024, 0.78);
+        const base64 = await blobToBase64(compressed);
+        const { data: parseData, error: parseError } = await supabase.functions.invoke('parse-image-item', {
+          body: { image_base64: base64, apartment_id: apartmentId },
+        });
+        if (parseError) throw parseError;
+        const parsed = parseData?.item;
+        if (!parsed?.description) throw new Error('AI לא זיהה פריט');
+
+        const photoUuid = crypto.randomUUID();
+        const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('item-photos')
+          .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
+
+        const { data: insertedRows, error: insertError } = await supabase.from('items').insert({
+          project_id: projectId,
+          apartment_id: apartmentId,
+          description: parsed.description,
+          quantity: parsed.quantity ?? 1,
+          location: parsed.location || null,
+          intended_for_collection: parsed.intended_for_collection !== false,
+          item_type: parsed.item_type as any,
+          material_category: parsed.material_category as any,
+          estimated_weight_kg: parsed.estimated_weight_kg ?? null,
+          condition: parsed.condition as any,
+          ai_confidence: parsed.ai_confidence ?? null,
+          source: 'image' as any,
+          image_url: publicUrl.publicUrl,
+          created_by_user_id: user.id,
+        } as any).select('id');
+        if (insertError) throw insertError;
+        (insertedRows ?? []).forEach((r: any) => newIds.push(r.id));
+        successCount++;
+      } catch (err: any) {
+        console.error(`multi-upload image ${i + 1} failed:`, err);
+        toast.error(`שגיאה בתמונה ${i + 1}: ${err?.message ?? 'שגיאה'}`);
+      }
+    }
+
+    setMultiUploading(false);
+    setMultiUploadProgress(null);
+
+    if (newIds.length > 0) {
+      pushUndo(newIds);
+      void runDuplicateCheck(newIds);
+      await loadData();
+    }
+    if (successCount > 0) {
+      toast.success(`${successCount} פריטים נוספו מ-${files.length} תמונות`);
+    }
+  };
+
   // ---- Room sweep (multi-item vision) ---------------------------------
   const openRoomPicker = () => {
     if (scanning || roomScanning || processing || recording) return;
@@ -752,35 +835,37 @@ export default function ApartmentDetail() {
     itemPhotoInputRef.current?.click();
   };
   const attachPhotoToItem = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
     const itemId = photoingItemId;
     if (e.target) e.target.value = '';
     setPhotoingItemId(null);
-    if (!file || !itemId) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('יש לבחור קובץ תמונה');
-      return;
-    }
+    if (files.length === 0 || !itemId) return;
     try {
-      const compressed = await compressImageToJpeg(file, 1600, 0.8);
-      const photoUuid = crypto.randomUUID();
-      const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from('item-photos')
-        .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
-      if (uploadError) throw uploadError;
-      const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
       const currentItem = items.find(i => i.id === itemId);
       const existingUrls: string[] = currentItem?.photo_urls?.length
         ? currentItem.photo_urls
         : currentItem?.image_url ? [currentItem.image_url] : [];
-      const newUrls = [...existingUrls, publicUrl.publicUrl];
+
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        const compressed = await compressImageToJpeg(file, 1600, 0.8);
+        const photoUuid = crypto.randomUUID();
+        const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('item-photos')
+          .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
+        uploadedUrls.push(publicUrl.publicUrl);
+      }
+
+      const allUrls = [...existingUrls, ...uploadedUrls];
       const { error: updateError } = await supabase
         .from('items')
-        .update({ photo_urls: newUrls, image_url: newUrls[0] } as any)
+        .update({ photo_urls: allUrls, image_url: allUrls[0] } as any)
         .eq('id', itemId);
       if (updateError) throw updateError;
-      toast.success(newUrls.length > 1 ? `${newUrls.length} תמונות לפריט` : 'תמונה צורפה לפריט');
+      toast.success(uploadedUrls.length > 1 ? `${uploadedUrls.length} תמונות צורפו לפריט` : 'תמונה צורפה לפריט');
       await loadData();
     } catch (err: any) {
       console.error('attach photo failed:', err);
@@ -1398,7 +1483,7 @@ export default function ApartmentDetail() {
             onClick={startMultiPhotoMode}
             size="lg"
             variant={multiPhotoMode ? 'default' : 'outline'}
-            disabled={recording || processing || scanning || roomScanning}
+            disabled={recording || processing || scanning || roomScanning || multiUploading}
             className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
             aria-label="צילום רציף — צלם מספר פריטים ברצף"
             title="צילום רציף — צלם מספר פריטים ללא הפסקה"
@@ -1415,6 +1500,29 @@ export default function ApartmentDetail() {
                 {multiPhotoMode && photoCaptureCount > 0 && (
                   <span className="text-xs bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">{photoCaptureCount}</span>
                 )}
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={openMultiUploadPicker}
+            size="lg"
+            variant={multiUploading ? 'secondary' : 'outline'}
+            disabled={recording || processing || scanning || roomScanning || multiPhotoMode || multiUploading}
+            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
+            aria-label="העלה מספר תמונות מהגלריה"
+            title="העלה מספר תמונות — AI מזהה פריט מכל תמונה"
+          >
+            {multiUploading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
+                {multiUploadProgress && (
+                  <span className="text-xs tabular-nums">{multiUploadProgress.current}/{multiUploadProgress.total}</span>
+                )}
+              </>
+            ) : (
+              <>
+                <Images className="h-5 w-5 sm:h-6 sm:w-6" />
+                <span className="hidden sm:inline">תמונות</span>
               </>
             )}
           </Button>
@@ -1465,14 +1573,23 @@ export default function ApartmentDetail() {
           className="hidden"
           onChange={handleImageCapture}
         />
-        {/* Hidden input for the per-item Camera icon (attach photo to existing item). */}
+        {/* Hidden input for the per-item Camera icon (attach photo to existing item). No capture= so OS shows camera+gallery choice; multiple allows selecting several at once. */}
         <input
           ref={itemPhotoInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
+          multiple
           className="hidden"
           onChange={attachPhotoToItem}
+        />
+        {/* Hidden input for multi-gallery upload — creates new items via AI for each photo. */}
+        <input
+          ref={multiUploadInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleMultiUpload}
         />
         {/* Hidden input for the room sweep (parse-room-image). */}
         <input
