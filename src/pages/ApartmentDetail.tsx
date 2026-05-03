@@ -144,6 +144,11 @@ export default function ApartmentDetail() {
   const [showAttributionDialog, setShowAttributionDialog] = useState(false);
   const [pendingCollectionItemId, setPendingCollectionItemId] = useState<string | null>(null);
   const [collectorInput, setCollectorInput] = useState('');
+  const [isReattribution, setIsReattribution] = useState(false);
+
+  // Bulk collect attribution
+  const [showBulkCollectDialog, setShowBulkCollectDialog] = useState(false);
+  const [bulkCollectorInput, setBulkCollectorInput] = useState('');
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -669,19 +674,26 @@ export default function ApartmentDetail() {
     });
   };
   const exitBulkMode = () => { setBulkMode(false); setBulkSelected(new Set()); };
-  const bulkMarkCollected = async (flag: boolean) => {
+
+  const bulkMarkCollected = async (flag: boolean, collectorName?: string) => {
     if (bulkSelected.size === 0) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('no user');
-      const { error } = await supabase
-        .from('items')
-        .update({
-          collected: flag,
-          collected_by_user_id: flag ? user.id : null,
-        } as any)
-        .in('id', [...bulkSelected]);
-      if (error) throw error;
+      const updatePayload: any = {
+        collected: flag,
+        collected_by_user_id: flag ? user.id : null,
+        status: flag ? 'collected' : 'pending',
+        collected_by: flag ? (collectorName || null) : null,
+      };
+      let { error } = await supabase.from('items').update(updatePayload).in('id', [...bulkSelected]);
+      if (error) {
+        // Fallback without optional columns
+        const core = { collected: flag, collected_by_user_id: flag ? user.id : null };
+        const retry = await supabase.from('items').update(core).in('id', [...bulkSelected]);
+        if (retry.error) throw retry.error;
+      }
+      if (flag && collectorName) localStorage.setItem('fc_last_collector', collectorName);
       toast.success(flag ? `${bulkSelected.size} פריטים סומנו כנאספו` : `${bulkSelected.size} פריטים בוטלו מאיסוף`);
       await loadData();
       exitBulkMode();
@@ -689,6 +701,18 @@ export default function ApartmentDetail() {
       console.error('bulk update failed:', err);
       toast.error('שגיאה בעדכון בכמות');
     }
+  };
+
+  const startBulkCollect = () => {
+    setBulkCollectorInput(localStorage.getItem('fc_last_collector') || '');
+    setShowBulkCollectDialog(true);
+  };
+
+  const confirmBulkCollect = async () => {
+    setShowBulkCollectDialog(false);
+    const name = bulkCollectorInput.trim();
+    await bulkMarkCollected(true, name || undefined);
+    setBulkCollectorInput('');
   };
   const bulkDelete = async () => {
     if (bulkSelected.size === 0) return;
@@ -843,8 +867,18 @@ export default function ApartmentDetail() {
         updateData.intended_for_collection = false;
       }
 
-      const { error } = await supabase.from('items').update(updateData).eq('id', itemId);
-      if (error) throw error;
+      let { error } = await supabase.from('items').update(updateData).eq('id', itemId);
+      if (error) {
+        // Fallback: retry without optional columns added in later migrations
+        // (status, collected_by TEXT, photo_urls) in case production DB is behind.
+        const coreData = Object.fromEntries(
+          Object.entries(updateData).filter(([k]) =>
+            !['status', 'collected_by', 'photo_urls', 'notes', 'collected_at'].includes(k)
+          )
+        );
+        const retry = await supabase.from('items').update(coreData).eq('id', itemId);
+        if (retry.error) throw retry.error;
+      }
 
       await loadData();
       toast.success('פריט עודכן');
@@ -858,16 +892,24 @@ export default function ApartmentDetail() {
   };
   // Show "נאסף על ידי מי?" dialog before marking collected
   const requestCollection = (itemId: string) => {
-    const last = localStorage.getItem('fc_last_collector') || '';
-    setCollectorInput(last);
+    setIsReattribution(false);
+    setCollectorInput(localStorage.getItem('fc_last_collector') || '');
     setPendingCollectionItemId(itemId);
     setShowAttributionDialog(true);
   };
 
-  const confirmCollection = async (skipName = false) => {
+  // Re-open the dialog to correct who collected an already-collected item
+  const reattributeCollection = (itemId: string, currentCollector: string | null) => {
+    setIsReattribution(true);
+    setCollectorInput(currentCollector || localStorage.getItem('fc_last_collector') || '');
+    setPendingCollectionItemId(itemId);
+    setShowAttributionDialog(true);
+  };
+
+  const confirmCollection = async () => {
     if (!pendingCollectionItemId) return;
     setShowAttributionDialog(false);
-    const name = skipName ? '' : collectorInput.trim();
+    const name = collectorInput.trim();
     if (name) localStorage.setItem('fc_last_collector', name);
     await updateItem(pendingCollectionItemId, {
       collected: true,
@@ -875,6 +917,7 @@ export default function ApartmentDetail() {
     });
     setPendingCollectionItemId(null);
     setCollectorInput('');
+    setIsReattribution(false);
   };
 
   const markDiscarded = async (itemId: string, discarded: boolean) => {
@@ -1066,7 +1109,7 @@ export default function ApartmentDetail() {
             <span className="text-sm font-semibold flex-1 truncate">
               {bulkSelected.size} נבחרו
             </span>
-            <Button size="sm" variant="secondary" onClick={() => bulkMarkCollected(true)} disabled={bulkSelected.size === 0} className="h-8 gap-1">
+            <Button size="sm" variant="secondary" onClick={startBulkCollect} disabled={bulkSelected.size === 0} className="h-8 gap-1">
               <Check className="h-3.5 w-3.5" /> נאסף
             </Button>
             <Button size="sm" variant="destructive" onClick={bulkDelete} disabled={bulkSelected.size === 0} className="h-8 gap-1">
@@ -1222,9 +1265,17 @@ export default function ApartmentDetail() {
                       </div>
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 text-xs text-muted-foreground mt-1">
                         {item.created_by && <span className="break-words">הוסף על ידי: {item.created_by.name}</span>}
-                        {item.collected && (item.collected_by || item.collector_profile?.name) && (
-                          <><span>•</span><span className="break-words">נאסף על ידי: {item.collected_by || item.collector_profile?.name}</span></>
-                        )}
+                        {item.collected ? (
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); reattributeCollection(item.id, item.collected_by || item.collector_profile?.name || null); }}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
+                            title="לחץ לעריכת שם האוסף"
+                          >
+                            <Check className="h-3 w-3" />
+                            נאסף{(item.collected_by || item.collector_profile?.name) ? ` על ידי: ${item.collected_by || item.collector_profile?.name}` : ''}
+                          </button>
+                        ) : null}
                         {item.status === 'discarded' && (
                           <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive">
                             <Ban className="h-2.5 w-2.5" /> נזרק
@@ -1672,19 +1723,23 @@ export default function ApartmentDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Collection Attribution Dialog */}
-      <Dialog open={showAttributionDialog} onOpenChange={open => { if (!open) setShowAttributionDialog(false); }}>
+      {/* Collection Attribution Dialog — initial collection or re-attribution */}
+      <Dialog open={showAttributionDialog} onOpenChange={open => {
+        if (!open) { setShowAttributionDialog(false); setPendingCollectionItemId(null); setIsReattribution(false); }
+      }}>
         <DialogContent dir="rtl" className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <User className="h-5 w-5 text-primary" />
-              נאסף על ידי מי?
+              {isReattribution ? 'עריכת שם האוסף' : 'מי אסף את הפריט?'}
             </DialogTitle>
-            <DialogDescription>הזן את שם האוסף לצורך מעקב</DialogDescription>
+            <DialogDescription>
+              {isReattribution ? 'שנה את שם האוסף המשויך לפריט זה' : 'הזן שם לצורך מעקב — ניתן לדלג'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-1">
             <Input
-              placeholder="שם האוסף"
+              placeholder="שם האוסף (אופציונלי)"
               value={collectorInput}
               onChange={e => setCollectorInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void confirmCollection(); }}
@@ -1692,12 +1747,50 @@ export default function ApartmentDetail() {
               dir="rtl"
             />
             <div className="flex gap-2">
-              <Button onClick={() => void confirmCollection()} className="flex-1" disabled={!collectorInput.trim()}>
-                <Check className="h-4 w-4 ml-2" />
-                אשר
+              <Button onClick={() => void confirmCollection()} className="flex-1 gap-2">
+                <Check className="h-4 w-4" />
+                {collectorInput.trim() ? 'אשר' : 'ללא שם'}
               </Button>
-              <Button variant="outline" onClick={() => void confirmCollection(true)} className="flex-1">
-                דלג
+              <Button variant="outline" onClick={() => {
+                setShowAttributionDialog(false);
+                setPendingCollectionItemId(null);
+                setIsReattribution(false);
+              }} className="flex-shrink-0">
+                ביטול
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Collect Attribution Dialog */}
+      <Dialog open={showBulkCollectDialog} onOpenChange={open => { if (!open) setShowBulkCollectDialog(false); }}>
+        <DialogContent dir="rtl" className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5 text-primary" />
+              מי אסף את הפריטים?
+            </DialogTitle>
+            <DialogDescription>
+              {bulkSelected.size} פריטים יסומנו כנאספו — הזן שם לצורך מעקב
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <Input
+              placeholder="שם האוסף (אופציונלי)"
+              value={bulkCollectorInput}
+              onChange={e => setBulkCollectorInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void confirmBulkCollect(); }}
+              autoFocus
+              dir="rtl"
+            />
+            <div className="flex gap-2">
+              <Button onClick={() => void confirmBulkCollect()} className="flex-1 gap-2">
+                <Check className="h-4 w-4" />
+                {bulkCollectorInput.trim() ? `סמן ${bulkSelected.size} כנאספו` : `סמן ${bulkSelected.size} ללא שם`}
+              </Button>
+              <Button variant="outline" onClick={() => setShowBulkCollectDialog(false)} className="flex-shrink-0">
+                ביטול
               </Button>
             </div>
           </div>
