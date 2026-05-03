@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon, FileSpreadsheet, FileText } from 'lucide-react';
+import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon, FileSpreadsheet, FileText, FileBarChart } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { generateExecutiveReport } from '@/lib/executiveReportPDF';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
 
@@ -214,7 +215,7 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
     }
   };
 
-  const [exporting, setExporting] = useState<'csv' | 'excel' | 'pdf' | null>(null);
+  const [exporting, setExporting] = useState<'csv' | 'excel' | 'pdf' | 'executive' | null>(null);
 
   const handleExportCSV = () => {
     if (!stats?.items) return;
@@ -248,6 +249,27 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
     } catch (err) {
       console.error('PDF export failed:', err);
       toast.error('שגיאה בייצוא PDF');
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportExecutive = async () => {
+    if (!stats?.items) return;
+    setExporting('executive');
+    try {
+      const projectName = selectedProject === 'all' 
+        ? 'כל הפרויקטים' 
+        : projects.find(p => p.id === selectedProject)?.name || 'פרויקט';
+      await generateExecutiveReport({
+        projectName,
+        projectAddress: '',
+        items: stats.items,
+      });
+      toast.success('דוח מנהלים הורד בהצלחה');
+    } catch (err) {
+      console.error('Executive report failed:', err);
+      toast.error('שגיאה ביצירת דוח מנהלים');
     } finally {
       setExporting(null);
     }
@@ -292,7 +314,7 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                 <span className="hidden sm:inline">Excel</span>
               </Button>
               <Button 
-                variant="secondary" 
+                variant="outline" 
                 size="sm" 
                 onClick={handleExportPDF} 
                 disabled={!!exporting}
@@ -305,6 +327,21 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                   <FileText className="h-4 w-4" />
                 )}
                 <span className="hidden sm:inline">PDF</span>
+              </Button>
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={handleExportExecutive} 
+                disabled={!!exporting}
+                className="gap-1.5 bg-primary"
+                title="דוח מנהלים מקצועי"
+              >
+                {exporting === 'executive' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileBarChart className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">דוח מנהלים</span>
               </Button>
             </div>
           </div>
