@@ -627,27 +627,41 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
             )}
             
             {categoryViewMode === 'bar' && (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart 
-                  data={stats?.materialChartData || []} 
+              <ResponsiveContainer
+                width="100%"
+                height={Math.max(260, (stats?.materialChartData?.length || 0) * 44 + 40)}
+              >
+                <BarChart
+                  data={stats?.materialChartData || []}
                   layout="vertical"
-                  margin={{ top: 5, right: 80, left: 20, bottom: 5 }}
+                  margin={{ top: 4, right: 90, left: 16, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} opacity={0.4} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11, fill: '#6B7280' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
                     orientation="right"
-                    width={70}
-                    tick={{ fontSize: 13 }}
-                    tickMargin={8}
+                    width={82}
+                    tick={{ fontSize: 12, fill: '#374151' }}
+                    tickMargin={6}
+                    axisLine={false}
+                    tickLine={false}
                   />
-                  <Tooltip 
-                    formatter={(value: number) => [`${value} פריטים`, '']}
-                    contentStyle={{ textAlign: 'right', direction: 'rtl' }}
+                  <Tooltip
+                    formatter={(value: number, _: string, props: any) => [
+                      `${value} פריטים (${props.payload.percentage}%)`,
+                      '',
+                    ]}
+                    contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 13 }}
+                    cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                   />
-                  <Bar dataKey="count" radius={[4, 0, 0, 4]} barSize={24}>
+                  <Bar dataKey="count" radius={[0, 5, 5, 0]} barSize={22} maxBarSize={30}>
                     {stats?.materialChartData?.map((_: any, index: number) => (
                       <Cell key={`bar-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
@@ -655,44 +669,49 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                 </BarChart>
               </ResponsiveContainer>
             )}
-            
+
             {categoryViewMode === 'pie' && (
-              <ResponsiveContainer width="100%" height={320}>
-                <PieChart>
-                  <Pie
-                    data={stats?.materialChartData || []}
-                    dataKey="count"
-                    nameKey="name"
-                    cx="40%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={90}
-                    paddingAngle={2}
-                  >
-                    {stats?.materialChartData?.map((_: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value: number, name: string, props: any) => [
-                      `${value} פריטים (${props.payload.percentage}%)`, 
-                      ''
-                    ]}
-                    contentStyle={{ textAlign: 'right', direction: 'rtl' }}
-                  />
-                  <Legend 
-                    layout="vertical" 
-                    align="left" 
-                    verticalAlign="middle"
-                    wrapperStyle={{ paddingLeft: 20 }}
-                    formatter={(value, entry: any) => (
-                      <span style={{ color: entry.color, fontSize: 13 }}>
-                        {value} ({entry.payload.percentage}%)
-                      </span>
-                    )}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="w-full">
+                <ResponsiveContainer width="100%" height={230}>
+                  <PieChart>
+                    <Pie
+                      data={stats?.materialChartData || []}
+                      dataKey="count"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={100}
+                      paddingAngle={3}
+                      strokeWidth={0}
+                    >
+                      {stats?.materialChartData?.map((_: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, _: string, props: any) => [
+                        `${value} פריטים (${props.payload.percentage}%)`,
+                        props.payload.name,
+                      ]}
+                      contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 13 }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Legend below chart — no overlap */}
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-3 px-2 pb-1">
+                  {stats?.materialChartData?.map((item: any, index: number) => (
+                    <div key={item.name} className="flex items-center gap-1.5">
+                      <div
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                      />
+                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="text-xs text-muted-foreground">({item.percentage}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
             
             {(!stats?.materialChartData || stats.materialChartData.length === 0) && (
