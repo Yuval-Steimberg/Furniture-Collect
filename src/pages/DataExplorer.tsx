@@ -350,7 +350,7 @@ export default function DataExplorer() {
         <Card>
           <CardContent className="p-3 space-y-3">
             {/* Primary row: Project + Status (always visible) */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs">פרויקט</Label>
                 <Select value={selectedProject} onValueChange={v => { setSelectedProject(v); setPage(1); }}>
@@ -408,7 +408,7 @@ export default function DataExplorer() {
 
             {/* Advanced filters — collapsible */}
             {showAdvancedFilters && (
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t">
                 <div className="space-y-1">
                   <Label className="text-xs">בניין</Label>
                   <Select value={selectedBuilding} onValueChange={v => { setSelectedBuilding(v); setPage(1); }} disabled={selectedProject === 'all'}>
@@ -439,11 +439,11 @@ export default function DataExplorer() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1 col-span-2 sm:col-span-1">
+                <div className="space-y-1 col-span-1">
                   <Label className="text-xs">מתאריך</Label>
                   <Input type="date" className="h-9" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
                 </div>
-                <div className="space-y-1 col-span-2 sm:col-span-1">
+                <div className="space-y-1 col-span-1">
                   <Label className="text-xs">עד תאריך</Label>
                   <Input type="date" className="h-9" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
                 </div>
@@ -461,7 +461,7 @@ export default function DataExplorer() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-3 pb-3">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <div className="space-y-1">
                 <Label className="text-xs">קבץ לפי</Label>
                 <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>

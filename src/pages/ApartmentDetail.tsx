@@ -1444,124 +1444,113 @@ export default function ApartmentDetail() {
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-background border-t shadow-lg">
-        <div className="flex gap-2 w-full">
-          <Button onClick={toggleRecording} size="lg" className="flex-1 gap-2 h-12 sm:h-14 text-base sm:text-lg relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
+      <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg">
+        {/* Row 1 — Primary voice action (full width) */}
+        <div className="px-2 pt-2 pb-1.5">
+          <Button onClick={toggleRecording} size="lg" className="w-full gap-2 h-12 text-base relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
             {processing ? <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current"></div>
                 <span>מעבד נתונים...</span>
               </> : recording ? <>
-                <Mic className="h-5 w-5 sm:h-6 sm:w-6 animate-pulse" />
+                <Mic className="h-5 w-5 animate-pulse" />
                 <span>עצור הקלטה</span>
               </> : <>
-                <Mic className="h-5 w-5 sm:h-6 sm:w-6" />
+                <Mic className="h-5 w-5" />
                 <span>הקלט פריטים</span>
               </>}
           </Button>
+        </div>
+        {/* Row 2 — Secondary actions: horizontally scrollable so all are reachable */}
+        <div className="flex gap-1.5 overflow-x-auto px-2 pb-2 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
           <Button
             onClick={openCameraPicker}
-            size="lg"
-            variant={scanning ? 'secondary' : 'outline'}
+            size="sm"
+            variant={scanning && !multiPhotoMode ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiPhotoMode}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
-            aria-label="צלם פריט"
+            className="flex-shrink-0 gap-1.5 h-10 px-3 min-w-[64px] flex-col py-1.5 h-auto"
             title="צלם פריט בודד (AI)"
           >
             {scanning && !multiPhotoMode ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground" />
+            ) : (
+              <ImagePlus className="h-4 w-4" />
+            )}
+            <span className="text-[10px] leading-none">צלם</span>
+          </Button>
+          <Button
+            onClick={openMultiUploadPicker}
+            size="sm"
+            variant={multiUploading ? 'secondary' : 'outline'}
+            disabled={recording || processing || scanning || roomScanning || multiPhotoMode || multiUploading}
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
+            title="העלה מספר תמונות מהגלריה — AI מזהה פריט מכל תמונה"
+          >
+            {multiUploading ? (
               <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-muted-foreground"></div>
-                <span className="hidden sm:inline">מנתח…</span>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                {multiUploadProgress && (
+                  <span className="text-[10px] leading-none tabular-nums">{multiUploadProgress.current}/{multiUploadProgress.total}</span>
+                )}
               </>
             ) : (
               <>
-                <ImagePlus className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="hidden sm:inline">צלם</span>
+                <Images className="h-4 w-4" />
+                <span className="text-[10px] leading-none">תמונות</span>
               </>
             )}
           </Button>
           <Button
             onClick={startMultiPhotoMode}
-            size="lg"
+            size="sm"
             variant={multiPhotoMode ? 'default' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiUploading}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
-            aria-label="צילום רציף — צלם מספר פריטים ברצף"
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto border-primary/40"
             title="צילום רציף — צלם מספר פריטים ללא הפסקה"
           >
             {multiPhotoMode && scanning ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
-                <span className="hidden sm:inline">מנתח…</span>
-              </>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
             ) : (
-              <>
-                <Camera className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="hidden sm:inline">רציף</span>
-                {multiPhotoMode && photoCaptureCount > 0 && (
-                  <span className="text-xs bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">{photoCaptureCount}</span>
-                )}
-              </>
+              <Camera className="h-4 w-4" />
             )}
-          </Button>
-          <Button
-            onClick={openMultiUploadPicker}
-            size="lg"
-            variant={multiUploading ? 'secondary' : 'outline'}
-            disabled={recording || processing || scanning || roomScanning || multiPhotoMode || multiUploading}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
-            aria-label="העלה מספר תמונות מהגלריה"
-            title="העלה מספר תמונות — AI מזהה פריט מכל תמונה"
-          >
-            {multiUploading ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
-                {multiUploadProgress && (
-                  <span className="text-xs tabular-nums">{multiUploadProgress.current}/{multiUploadProgress.total}</span>
-                )}
-              </>
-            ) : (
-              <>
-                <Images className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="hidden sm:inline">תמונות</span>
-              </>
-            )}
+            <span className="text-[10px] leading-none">
+              {multiPhotoMode && photoCaptureCount > 0 ? `רציף (${photoCaptureCount})` : 'רציף'}
+            </span>
           </Button>
           <Button
             onClick={() => setShowGuided(true)}
-            size="lg"
+            size="sm"
             variant="outline"
             disabled={recording || processing || scanning || roomScanning}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
-            aria-label="סריקה מונחית — AI מלווה אותך חדר-אחרי-חדר"
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto border-primary/40"
             title="סריקה מונחית חדר-חדר"
           >
-            <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-            <span className="hidden sm:inline">מונחה</span>
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-[10px] leading-none">מונחה</span>
           </Button>
           <Button
             onClick={openRoomPicker}
-            size="lg"
+            size="sm"
             variant={roomScanning ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
-            aria-label="סריקת חדר (AI — פריטים מרובים)"
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
             title="סריקת חדר — צילום אחד, פריטים מרובים"
           >
             {roomScanning ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-muted-foreground"></div>
-                <span className="hidden sm:inline">סורק…</span>
-              </>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground" />
             ) : (
-              <>
-                <Scan className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="hidden sm:inline">חדר</span>
-              </>
+              <Scan className="h-4 w-4" />
             )}
+            <span className="text-[10px] leading-none">חדר</span>
           </Button>
-          <Button onClick={() => setShowManualDialog(true)} size="lg" className="gap-2 h-12 sm:h-14 w-12 sm:w-auto px-3 sm:px-4" variant="outline" disabled={recording || processing || scanning}>
-            <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span className="hidden sm:inline">ידני</span>
+          <Button
+            onClick={() => setShowManualDialog(true)}
+            size="sm"
+            variant="outline"
+            disabled={recording || processing || scanning}
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="text-[10px] leading-none">ידני</span>
           </Button>
         </div>
         {/* Hidden file input — opens the device camera on mobile, file picker on desktop. */}
