@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+import { Download, Send, Loader2, List, BarChart3, PieChart as PieChartIcon, FileSpreadsheet, FileText, FileBarChart } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { generateExecutiveReport } from '@/lib/executiveReportPDF';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
 
@@ -213,32 +215,64 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
     }
   };
 
-  const exportToExcel = () => {
-    if (!stats?.items) return;
-    
-    const csv = [
-      ['פרויקט', 'בניין', 'דירה', 'תיאור', 'כמות', 'מיקום', 'לאיסוף', 'נאסף', 'סוג', 'קטגוריה', 'משקל (ק"ג)'].join(','),
-      ...stats.items.map((item: any) => [
-        item.projects?.name || '',
-        item.apartments?.building_number || '',
-        item.apartments?.apartment_number || '',
-        `"${item.description}"`,
-        item.quantity,
-        item.location || '',
-        item.intended_for_collection ? 'כן' : 'לא',
-        item.collected ? 'כן' : 'לא',
-        item.item_type,
-        CATEGORY_TRANSLATIONS[item.material_category] || item.material_category,
-        item.estimated_weight_kg || ''
-      ].join(','))
-    ].join('\n');
+  const [exporting, setExporting] = useState<'csv' | 'excel' | 'pdf' | 'executive' | null>(null);
 
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `statistics-${selectedProject}-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    toast.success('הקובץ יוצא בהצלחה');
+  const handleExportCSV = () => {
+    if (!stats?.items) return;
+    const filename = `statistics-${selectedProject}-${new Date().toISOString().split('T')[0]}`;
+    exportToCSV(stats, filename);
+    toast.success('קובץ CSV יוצא בהצלחה');
+  };
+
+  const handleExportExcel = async () => {
+    if (!stats?.items) return;
+    setExporting('excel');
+    try {
+      const filename = `statistics-${selectedProject}-${new Date().toISOString().split('T')[0]}`;
+      await exportToExcel(stats, projects, filename);
+      toast.success('קובץ Excel יוצא בהצלחה');
+    } catch (err) {
+      console.error('Excel export failed:', err);
+      toast.error('שגיאה בייצוא Excel');
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!stats?.items) return;
+    setExporting('pdf');
+    try {
+      const filename = `statistics-${selectedProject}-${new Date().toISOString().split('T')[0]}`;
+      await exportToPDF(stats, projects, selectedProject, filename);
+      toast.success('קובץ PDF יוצא בהצלחה');
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      toast.error('שגיאה בייצוא PDF');
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportExecutive = async () => {
+    if (!stats?.items) return;
+    setExporting('executive');
+    try {
+      const projectName = selectedProject === 'all' 
+        ? 'כל הפרויקטים' 
+        : projects.find(p => p.id === selectedProject)?.name || 'פרויקט';
+      await generateExecutiveReport({
+        projectName,
+        projectAddress: '',
+        items: stats.items,
+      });
+      toast.success('דוח מנהלים הורד בהצלחה');
+    } catch (err) {
+      console.error('Executive report failed:', err);
+      toast.error('שגיאה ביצירת דוח מנהלים');
+    } finally {
+      setExporting(null);
+    }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">טוען...</div>;
@@ -252,10 +286,64 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl md:text-2xl font-bold">סטטיסטיקות כלליות</h1>
-            <Button variant="secondary" size="sm" onClick={exportToExcel} className="gap-2">
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">ייצוא</span>
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleExportCSV} 
+                disabled={!!exporting}
+                className="gap-1.5"
+                title="ייצוא CSV"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">CSV</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleExportExcel} 
+                disabled={!!exporting}
+                className="gap-1.5"
+                title="ייצוא Excel"
+              >
+                {exporting === 'excel' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Excel</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleExportPDF} 
+                disabled={!!exporting}
+                className="gap-1.5"
+                title="ייצוא PDF"
+              >
+                {exporting === 'pdf' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">PDF</span>
+              </Button>
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={handleExportExecutive} 
+                disabled={!!exporting}
+                className="gap-1.5 bg-primary"
+                title="דוח מנהלים מקצועי"
+              >
+                {exporting === 'executive' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileBarChart className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">דוח מנהלים</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>

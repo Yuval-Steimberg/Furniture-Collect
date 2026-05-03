@@ -129,6 +129,11 @@ export default function ApartmentDetail() {
   const [roomSelected, setRoomSelected] = useState<Set<number>>(new Set());
   const [duplicateWarnings, setDuplicateWarnings] = useState<Map<string, { duplicate_of: string; reason: string }>>(new Map());
 
+  // Multi-photo capture mode state
+  const [multiPhotoMode, setMultiPhotoMode] = useState(false);
+  const [photoCaptureCount, setPhotoCaptureCount] = useState(0);
+  const [showContinueCaptureDialog, setShowContinueCaptureDialog] = useState(false);
+
   // Bulk select + grouping UI
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
@@ -452,11 +457,41 @@ export default function ApartmentDetail() {
       const lowConf = (parsed.ai_confidence ?? 1) < 0.6;
       if (lowConf) toast.message('פריט נוסף — מומלץ לאמת תיאור');
       await loadData();
+      
+      // Multi-photo mode: increment count and show continue dialog
+      if (multiPhotoMode) {
+        setPhotoCaptureCount(prev => prev + 1);
+        setShowContinueCaptureDialog(true);
+      }
     } catch (err: any) {
       console.error('scan failed:', err);
       toast.error(err?.message ? `שגיאה בסריקה: ${err.message}` : 'שגיאה בסריקה');
     } finally {
       setScanning(false);
+    }
+  };
+
+  // Start multi-photo capture session
+  const startMultiPhotoMode = () => {
+    setMultiPhotoMode(true);
+    setPhotoCaptureCount(0);
+    openCameraPicker();
+  };
+
+  // Continue capturing in multi-photo mode
+  const continueCapturing = () => {
+    setShowContinueCaptureDialog(false);
+    openCameraPicker();
+  };
+
+  // End multi-photo capture session
+  const endMultiPhotoMode = () => {
+    const count = photoCaptureCount;
+    setMultiPhotoMode(false);
+    setPhotoCaptureCount(0);
+    setShowContinueCaptureDialog(false);
+    if (count > 0) {
+      toast.success(`${count} תמונות נוספו בהצלחה`);
     }
   };
   // ---- Room sweep (multi-item vision) ---------------------------------
@@ -1180,12 +1215,12 @@ export default function ApartmentDetail() {
             onClick={openCameraPicker}
             size="lg"
             variant={scanning ? 'secondary' : 'outline'}
-            disabled={recording || processing || scanning || roomScanning}
+            disabled={recording || processing || scanning || roomScanning || multiPhotoMode}
             className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
             aria-label="צלם פריט"
-            title="צלם פריט (AI)"
+            title="צלם פריט בודד (AI)"
           >
-            {scanning ? (
+            {scanning && !multiPhotoMode ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-muted-foreground"></div>
                 <span className="hidden sm:inline">מנתח…</span>
@@ -1194,6 +1229,30 @@ export default function ApartmentDetail() {
               <>
                 <ImagePlus className="h-5 w-5 sm:h-6 sm:w-6" />
                 <span className="hidden sm:inline">צלם</span>
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={startMultiPhotoMode}
+            size="lg"
+            variant={multiPhotoMode ? 'default' : 'outline'}
+            disabled={recording || processing || scanning || roomScanning}
+            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
+            aria-label="צילום רציף — צלם מספר פריטים ברצף"
+            title="צילום רציף — צלם מספר פריטים ללא הפסקה"
+          >
+            {multiPhotoMode && scanning ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
+                <span className="hidden sm:inline">מנתח…</span>
+              </>
+            ) : (
+              <>
+                <Camera className="h-5 w-5 sm:h-6 sm:w-6" />
+                <span className="hidden sm:inline">רציף</span>
+                {multiPhotoMode && photoCaptureCount > 0 && (
+                  <span className="text-xs bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">{photoCaptureCount}</span>
+                )}
               </>
             )}
           </Button>
@@ -1304,6 +1363,27 @@ export default function ApartmentDetail() {
             <Button variant="outline" onClick={() => setRoomDetected(null)}>ביטול</Button>
             <Button onClick={confirmRoomItems} disabled={roomSelected.size === 0}>
               הוסף {roomSelected.size} פריטים
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Multi-photo continue capture dialog */}
+      <Dialog open={showContinueCaptureDialog} onOpenChange={(open) => { if (!open) endMultiPhotoMode(); }}>
+        <DialogContent dir="rtl" className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>פריט נוסף בהצלחה</DialogTitle>
+            <DialogDescription>
+              {photoCaptureCount} תמונות צולמו עד כה. להמשיך לצלם?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" onClick={endMultiPhotoMode}>
+              סיום ({photoCaptureCount})
+            </Button>
+            <Button onClick={continueCapturing} className="gap-2">
+              <Camera className="h-4 w-4" />
+              צלם עוד
             </Button>
           </div>
         </DialogContent>

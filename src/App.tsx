@@ -21,6 +21,8 @@ import GlobalStatistics from "./pages/GlobalStatistics";
 import ProjectUsers from "./pages/ProjectUsers";
 import UserManagement from "./pages/UserManagement";
 import AcceptInvitation from "./pages/AcceptInvitation";
+import DataExplorer from "./pages/DataExplorer";
+import ManagerDashboard from "./pages/ManagerDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +48,8 @@ function AnimatedRoutes() {
         <Route path="/projects/:projectId/report" element={<PageTransition><SustainabilityReport /></PageTransition>} />
         <Route path="/projects/:projectId/users" element={<AppLayout><PageTransition><ProjectUsers /></PageTransition></AppLayout>} />
         <Route path="/global-statistics" element={<AppLayout><PageTransition><GlobalStatistics /></PageTransition></AppLayout>} />
+        <Route path="/data-explorer" element={<AppLayout><PageTransition><DataExplorer /></PageTransition></AppLayout>} />
+        <Route path="/manager-dashboard" element={<AppLayout><PageTransition><ManagerDashboard /></PageTransition></AppLayout>} />
         <Route path="/user-management" element={<AppLayout><PageTransition><UserManagement /></PageTransition></AppLayout>} />
         <Route path="*" element={<AppLayout><PageTransition><NotFound /></PageTransition></AppLayout>} />
       </Routes>
