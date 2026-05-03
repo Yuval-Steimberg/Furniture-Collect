@@ -801,13 +801,38 @@ export default function ApartmentDetail() {
       toast.error('שגיאה בביטול הפעולה');
     }
   };
+  // Silently tries to mark apartment COMPLETED when all collection items are done.
+  // Runs in its own try-catch so RLS / permission failures never surface as a
+  // user-facing error on the item that was just updated successfully.
+  const tryMarkApartmentCompleted = async () => {
+    try {
+      const { data: allItems } = await supabase
+        .from('items')
+        .select('intended_for_collection, collected')
+        .eq('apartment_id', apartmentId);
+      if (!allItems || allItems.length === 0) return;
+      const forCollection = allItems.filter(i => i.intended_for_collection);
+      if (forCollection.length === 0 || !forCollection.every(i => i.collected)) return;
+      if (apartmentInfo?.status === 'COMPLETED') return;
+      await supabase.from('apartments').update({ status: 'COMPLETED' }).eq('id', apartmentId);
+      const { data: apartment } = await supabase
+        .from('apartments').select('*, projects(name)').eq('id', apartmentId).single();
+      if (apartment) setApartmentInfo(apartment);
+    } catch (err) {
+      console.warn('apartment completion check skipped:', err);
+    }
+  };
+
   const updateItem = async (itemId: string, updates: Partial<Item>) => {
     try {
       const updateData: any = { ...updates };
+      // Strip virtual join fields that aren't real DB columns
+      delete updateData.created_by;
+      delete updateData.collector_profile;
+
       if (updates.collected === true && !items.find(i => i.id === itemId)?.collected) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) updateData.collected_by_user_id = user.id;
-        // Sync status column
         if (!('status' in updates)) updateData.status = 'collected';
       } else if (updates.collected === false) {
         updateData.collected_by_user_id = null;
@@ -817,46 +842,15 @@ export default function ApartmentDetail() {
       if (updates.status === 'discarded') {
         updateData.intended_for_collection = false;
       }
-      const {
-        error
-      } = await supabase.from('items').update(updateData).eq('id', itemId);
+
+      const { error } = await supabase.from('items').update(updateData).eq('id', itemId);
       if (error) throw error;
 
-      // Reload data to get updated user info
       await loadData();
-
-      // Check if all items intended for collection are now collected
-      const { data: allItems } = await supabase
-        .from('items')
-        .select('intended_for_collection, collected')
-        .eq('apartment_id', apartmentId);
-
-      if (allItems && allItems.length > 0) {
-        const itemsForCollection = allItems.filter(i => i.intended_for_collection);
-        const allCollected = itemsForCollection.length > 0 && 
-                            itemsForCollection.every(i => i.collected);
-
-        if (allCollected && apartmentInfo?.status !== 'COMPLETED') {
-          // Update apartment status to COMPLETED
-          await supabase
-            .from('apartments')
-            .update({ status: 'COMPLETED' })
-            .eq('id', apartmentId);
-          
-          // Reload apartment info
-          const { data: apartment } = await supabase
-            .from('apartments')
-            .select('*, projects(name)')
-            .eq('id', apartmentId)
-            .single();
-          
-          if (apartment) {
-            setApartmentInfo(apartment);
-          }
-        }
-      }
-
       toast.success('פריט עודכן');
+
+      // Apartment completion check runs independently — failures are swallowed.
+      void tryMarkApartmentCompleted();
     } catch (error: any) {
       toast.error('שגיאה בעדכון פריט');
       console.error(error);
