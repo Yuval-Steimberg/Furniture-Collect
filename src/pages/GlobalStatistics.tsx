@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
 import { generateExecutiveReport } from '@/lib/executiveReportPDF';
+import { PageHeader } from '@/components/PageHeader';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
 
@@ -297,53 +298,48 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-card border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="text-xl md:text-2xl font-bold truncate">סטטיסטיקות כלליות</h1>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Prominent Executive Report CTA */}
-              <Button
-                onClick={handleExportExecutive}
-                disabled={!!exporting || !stats?.items}
-                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
-                size="sm"
-              >
-                {exporting === 'executive' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileBarChart className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">Executive Report</span>
-                <span className="sm:hidden">Report</span>
-              </Button>
-              {/* Other export formats */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2" disabled={!!exporting}>
-                    {exporting && exporting !== 'executive' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    <span className="hidden sm:inline">ייצוא</span>
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56" dir="rtl">
-                  <DropdownMenuLabel>בחר פורמט</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleExportCSV} disabled={!!exporting} className="gap-2">
-                    <File className="h-4 w-4" /> CSV — נתונים גולמיים
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExportExcel} disabled={!!exporting} className="gap-2">
-                    <FileSpreadsheet className="h-4 w-4" /> Excel — גיליונות מרובים
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExportPDF} disabled={!!exporting} className="gap-2">
-                    <FileText className="h-4 w-4" /> PDF — סיכום
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+      <PageHeader
+        title="סטטיסטיקות כלליות"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleExportExecutive}
+              disabled={!!exporting || !stats?.items}
+              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+              size="sm"
+            >
+              {exporting === 'executive' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileBarChart className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Executive Report</span>
+              <span className="sm:hidden">Report</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5 text-sidebar-foreground hover:bg-sidebar-accent" disabled={!!exporting}>
+                  {exporting && exporting !== 'executive' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56" dir="rtl">
+                <DropdownMenuLabel>בחר פורמט</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleExportCSV} disabled={!!exporting} className="gap-2">
+                  <File className="h-4 w-4" /> CSV — נתונים גולמיים
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} disabled={!!exporting} className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" /> Excel — גיליונות מרובים
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF} disabled={!!exporting} className="gap-2">
+                  <FileText className="h-4 w-4" /> PDF — סיכום
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <main className="container mx-auto px-4 py-4 md:py-6 space-y-4 md:space-y-6">
         {/* Filters */}

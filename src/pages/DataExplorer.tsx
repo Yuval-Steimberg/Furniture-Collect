@@ -45,6 +45,7 @@ import {
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { PageHeader } from '@/components/PageHeader';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
 
@@ -311,38 +312,37 @@ export default function DataExplorer() {
   return (
     <div className="min-h-screen bg-muted w-full overflow-x-hidden" dir="rtl">
 
-      {/* ── Header ──────────────────────────────────────────────── */}
-      <header className="bg-card border-b sticky top-0 z-20 w-full">
-        <div className="px-3 sm:px-4 py-3 flex items-center gap-2">
-          <Search className="h-5 w-5 text-primary flex-shrink-0" />
-          <h1 className="text-lg sm:text-xl font-bold flex-1 min-w-0 truncate">חוקר נתונים</h1>
-          {activeFiltersCount > 0 && (
-            <Badge variant="secondary" className="flex-shrink-0">{activeFiltersCount}</Badge>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 flex-shrink-0">
-                <Download className="h-4 w-4" />
-                <span>ייצוא</span>
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52" dir="rtl">
-              <DropdownMenuLabel>בחר פורמט</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleExportCSV} className="gap-2">
-                <File className="h-4 w-4" /> CSV — נתונים גולמיים
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportExcel} className="gap-2">
-                <FileSpreadsheet className="h-4 w-4" /> Excel — גיליונות
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportPDF} className="gap-2">
-                <FileText className="h-4 w-4" /> PDF — סיכום
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
+      <PageHeader
+        title="חוקר נתונים"
+        actions={
+          <div className="flex items-center gap-1.5">
+            {activeFiltersCount > 0 && (
+              <Badge variant="secondary" className="flex-shrink-0">{activeFiltersCount}</Badge>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5 text-sidebar-foreground hover:bg-sidebar-accent">
+                  <Download className="h-4 w-4" />
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52" dir="rtl">
+                <DropdownMenuLabel>בחר פורמט</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleExportCSV} className="gap-2">
+                  <File className="h-4 w-4" /> CSV — נתונים גולמיים
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" /> Excel — גיליונות
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF} className="gap-2">
+                  <FileText className="h-4 w-4" /> PDF — סיכום
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        }
+      />
 
       <main className="px-3 sm:px-4 py-3 sm:py-4 space-y-3">
 

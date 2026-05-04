@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/PageHeader';
 
 export default function NewApartment() {
   const { projectId } = useParams();
@@ -49,16 +49,10 @@ export default function NewApartment() {
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-sidebar text-sidebar-foreground shadow-md">
-        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9 sm:h-10 sm:w-10">
-              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-            <h1 className="text-lg sm:text-xl font-bold">דירה חדשה</h1>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="דירה חדשה"
+        onBack={() => navigate(`/projects/${projectId}`)}
+      />
 
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-2xl">
         <Card>

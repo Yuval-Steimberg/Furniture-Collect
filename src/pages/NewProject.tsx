@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/PageHeader';
 
 export default function NewProject() {
   const navigate = useNavigate();
@@ -43,16 +43,10 @@ export default function NewProject() {
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-sidebar text-sidebar-foreground shadow-md">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/projects')} className="text-sidebar-foreground hover:bg-sidebar-accent">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-xl font-bold">פרויקט חדש</h1>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="פרויקט חדש"
+        onBack={() => navigate('/projects')}
+      />
 
       <main className="container mx-auto px-4 py-6 max-w-2xl">
         <Card>

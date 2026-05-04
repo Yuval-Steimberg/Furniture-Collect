@@ -13,6 +13,7 @@ import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus,
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
+import { PageHeader } from '@/components/PageHeader';
 import { Lightbox } from '@/components/Lightbox';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonItemRow } from '@/components/SkeletonCard';
@@ -1076,35 +1077,26 @@ export default function ApartmentDetail() {
     return <div className="min-h-screen flex items-center justify-center">טוען...</div>;
   }
   return <div className="min-h-screen bg-muted pb-24 w-screen overflow-x-hidden" dir="rtl">
-      <header className="bg-sidebar text-sidebar-foreground shadow-md sticky top-0 z-10 w-screen">
-        <div className="px-3 sm:px-4 py-3 sm:py-4 w-full">
-          <div className="flex items-center gap-2 sm:gap-4 w-full">
-            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0">
-              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+      <PageHeader
+        title={`בניין ${apartmentInfo?.building_number} · דירה ${apartmentInfo?.apartment_number}`}
+        subtitle={apartmentInfo?.projects?.name}
+        onBack={() => navigate(`/projects/${projectId}`)}
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setBulkMode(v => !v)}
+              className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8"
+              title={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
+              aria-label={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
+            >
+              <Check className={`h-4 w-4 ${bulkMode ? 'text-primary' : ''}`} />
             </Button>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs sm:text-sm text-primary-foreground/80 truncate">{apartmentInfo?.projects?.name}</p>
-              <h1 className="text-base sm:text-lg font-bold truncate">
-                בניין {apartmentInfo?.building_number} · דירה {apartmentInfo?.apartment_number}
-              </h1>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setBulkMode(v => !v)}
-                className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9"
-                title={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
-                aria-label={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
-              >
-                <Check className={`h-4 w-4 ${bulkMode ? 'text-primary' : ''}`} />
-              </Button>
-              {getStatusBadge(apartmentInfo?.status)}
-            </div>
-          </div>
-        </div>
-        {/* Thin progress strip at bottom of header — updates live as items are collected */}
-        {!loading && (() => {
+            {getStatusBadge(apartmentInfo?.status)}
+          </>
+        }
+        bottomSlot={!loading && (() => {
           const forCollection = items.filter(i => i.intended_for_collection && i.status !== 'discarded');
           const collectedCount = forCollection.filter(i => i.collected).length;
           const pct = forCollection.length > 0 ? (collectedCount / forCollection.length) * 100 : 0;
@@ -1118,7 +1110,7 @@ export default function ApartmentDetail() {
             </div>
           );
         })()}
-      </header>
+      />
 
       <main className="px-3 sm:px-4 py-4 sm:py-6 w-full">
         {/* Smart search — natural language filter over items */}

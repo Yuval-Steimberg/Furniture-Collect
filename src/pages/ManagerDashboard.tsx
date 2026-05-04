@@ -19,11 +19,11 @@ import {
   TrendingUp,
   Clock,
   Building2,
-  ArrowLeft,
   RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { PageHeader } from '@/components/PageHeader';
 
 interface DashboardStats {
   totalItems: number;
@@ -194,20 +194,10 @@ export default function ManagerDashboard() {
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-card border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <LayoutDashboard className="h-6 w-6 text-primary" />
-              <h1 className="text-xl md:text-2xl font-bold">לוח בקרה</h1>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
-              <ArrowLeft className="h-4 w-4 ml-2" />
-              חזרה
-            </Button>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="לוח בקרה"
+        onBack={() => navigate(-1)}
+      />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* KPI Cards */}
