@@ -117,23 +117,38 @@ export default function Dashboard() {
   return (
     <div dir="rtl" className="w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-6 sm:space-y-8">
       {/* Welcome banner */}
-      <section className="relative overflow-hidden rounded-2xl bg-sidebar text-sidebar-foreground p-5 sm:p-7">
+      <section className="relative overflow-hidden rounded-2xl bg-sidebar text-sidebar-foreground px-5 py-6 sm:px-8 sm:py-8">
+        {/* Subtle decorative — radial glow only, no floating circles */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_0%_100%,_rgba(181,201,173,0.18)_0%,_transparent_70%)] pointer-events-none" />
+        <div className="absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-primary/15 blur-2xl pointer-events-none" />
+
         <div className="relative z-10">
-          <p className="text-sm text-sidebar-foreground/70 mb-1">{greet}{userName ? `, ${userName.split(' ')[0]}` : ''}</p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            {totals.itemCount > 0
-              ? `${formatKg(totals.diverted_kg)} הוצלו מהטמנה`
-              : 'מוכנים לתעד את הפרויקט הראשון'}
+          {/* Eyebrow greeting */}
+          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-sidebar-foreground/50 mb-2.5">
+            {greet}{userName ? `, ${userName.split(' ')[0]}` : ''}
+          </p>
+
+          {/* Primary headline */}
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-none mb-3">
+            {totals.itemCount > 0 ? (
+              <>
+                {formatKg(totals.diverted_kg)}{' '}
+                <span className="text-primary">הוצלו מהטמנה</span>
+              </>
+            ) : (
+              'מוכנים לתעד את הפרויקט הראשון'
+            )}
           </h1>
+
+          {/* CO₂ subtitle */}
           {totals.itemCount > 0 && (
-            <p className="mt-1 text-sm text-sidebar-foreground/80">
-              {formatCO2(totals.co2_saved_kg)} נחסכו · על פני {totals.projectCount} {totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}
+            <p className="text-sm font-semibold text-sidebar-foreground/65">
+              {formatCO2(totals.co2_saved_kg)} נחסכו
+              <span className="mx-1.5 opacity-40">·</span>
+              על פני {totals.projectCount} {totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}
             </p>
           )}
         </div>
-        {/* Decorative sage circle in corner */}
-        <div className="absolute -left-8 -bottom-8 h-36 w-36 rounded-full bg-accent/20 blur-sm pointer-events-none" />
-        <div className="absolute left-16 top-2 h-16 w-16 rounded-full bg-primary/40 pointer-events-none" />
       </section>
 
       {/* Quick actions */}
