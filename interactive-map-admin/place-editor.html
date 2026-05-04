@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>עורך מקומות — JAS Route</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    /* ── Reset ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green:       #3D5443;
+      --green-dk:    #2f4134;
+      --bg:          #f3f4f6;
+      --card:        #ffffff;
+      --border:      #e5e7eb;
+      --text:        #111827;
+      --muted:       #6b7280;
+      --red:         #ef4444;
+      --red-light:   #fef2f2;
+      --radius-xl:   1rem;
+      --radius-lg:   .75rem;
+      --radius-md:   .5rem;
+      --shadow-sm:   0 1px 3px rgba(0,0,0,.07);
+      --shadow-md:   0 4px 14px rgba(0,0,0,.12);
+    }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    input, select, textarea, button { font-family: inherit; font-size: .875rem; }
+
+    /* ── Buttons ──────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: .4rem;
+      padding: .55rem 1rem; border-radius: var(--radius-lg);
+      font-weight: 600; font-size: .875rem; cursor: pointer;
+      border: none; transition: background .15s, opacity .15s;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-primary  { background: var(--green); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--green-dk); }
+    .btn-white    { background: #fff; color: var(--green); }
+    .btn-white:hover { background: #f0f0f0; }
+    .btn-ghost    { background: rgba(255,255,255,.18); color: #fff; border: none; }
+    .btn-ghost:hover { background: rgba(255,255,255,.28); }
+    .btn-outline  { background: #fff; color: var(--text); border: 1.5px solid var(--border); }
+    .btn-outline:hover { background: var(--bg); }
+    .btn-danger   { background: var(--red); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .icon-btn {
+      width: 2rem; height: 2rem; border-radius: 50%; border: none; background: transparent;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; color: var(--muted); transition: background .15s;
+    }
+    .icon-btn:hover { background: var(--bg); }
+
+    /* ── Setup screen ─────────────────────────────────────────────── */
+    #setup {
+      min-height: 100vh; display: flex; align-items: center;
+      justify-content: center; padding: 1.5rem;
+    }
+    .setup-card {
+      background: var(--card); border-radius: 1.5rem;
+      box-shadow: var(--shadow-md); padding: 2.5rem 2rem;
+      max-width: 420px; width: 100%; text-align: center;
+    }
+    .setup-icon { font-size: 3rem; margin-bottom: 1rem; }
+    .setup-card h1 { font-size: 1.5rem; margin-bottom: .5rem; }
+    .setup-card > p { color: var(--muted); font-size: .9rem; margin-bottom: 1.5rem; }
+    .setup-form { text-align: right; display: flex; flex-direction: column; gap: 1rem; }
+    .setup-form label { display: flex; flex-direction: column; gap: .4rem; font-size: .875rem; font-weight: 600; }
+    .setup-form input {
+      padding: .6rem .8rem; border: 1.5px solid var(--border);
+      border-radius: var(--radius-md); font-size: .875rem;
+      outline: none; transition: border-color .15s;
+    }
+    .setup-form input:focus { border-color: var(--green); }
+    .setup-note { font-size: .78rem; color: var(--muted); margin-top: .5rem; line-height: 1.6; }
+    .setup-note code { background: var(--bg); padding: .1rem .35rem; border-radius: .25rem; font-family: monospace; font-size: .8rem; }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    #app-header {
+      background: var(--green); color: #fff;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: .875rem 1rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .header-title h1 { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
+    .header-title p  { font-size: .75rem; opacity: .65; margin-top: .1rem; }
+    .header-actions  { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
+
+    /* ── Filter bar ───────────────────────────────────────────────── */
+    #filter-bar {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      position: sticky; top: 57px; z-index: 90;
+    }
+    .filter-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: .6rem 1rem;
+      display: flex; align-items: center; gap: .75rem;
+    }
+    .search-wrap {
+      position: relative; flex-shrink: 0;
+    }
+    .search-wrap span {
+      position: absolute; top: 50%; left: auto; right: .6rem;
+      transform: translateY(-50%); pointer-events: none; font-size: .85rem;
+    }
+    #search-input {
+      padding: .45rem .75rem .45rem 1.75rem;
+      border: 1.5px solid var(--border); border-radius: var(--radius-lg);
+      width: 160px; font-size: .8rem; outline: none;
+    }
+    #search-input:focus { border-color: var(--green); }
+    .pills { display: flex; gap: .4rem; overflow-x: auto; }
+    .pills::-webkit-scrollbar { display: none; }
+    .pill {
+      padding: .35rem .75rem; border-radius: 999px;
+      font-size: .75rem; font-weight: 600; cursor: pointer;
+      border: none; white-space: nowrap; transition: background .15s, color .15s;
+      background: var(--bg); color: var(--muted);
+    }
+    .pill:hover  { background: #e5e7eb; }
+    .pill.active { background: var(--green); color: #fff; }
+
+    /* ── Main grid ────────────────────────────────────────────────── */
+    #grid {
+      max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem;
+    }
+    .card-grid {
+      display: grid; gap: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    }
+
+    /* ── Place card ───────────────────────────────────────────────── */
+    .place-card {
+      background: var(--card); border-radius: var(--radius-xl);
+      border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+      overflow: hidden; transition: box-shadow .2s;
+    }
+    .place-card:hover { box-shadow: var(--shadow-md); }
+    .card-strip { height: 6px; }
+    .card-body  { padding: 1rem; }
+    .card-top   { display: flex; gap: .75rem; margin-bottom: .75rem; }
+    .cat-icon   { font-size: 1.5rem; flex-shrink: 0; margin-top: .1rem; }
+    .card-info  { min-width: 0; }
+    .card-info strong { display: block; font-size: 1rem; line-height: 1.25; }
+    .card-sub   { display: block; font-size: .8rem; color: var(--muted); margin-top: .1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cat-badge  {
+      display: inline-block; margin-top: .4rem;
+      font-size: .7rem; font-weight: 700; padding: .15rem .5rem;
+      border-radius: 999px;
+    }
+    .card-meta  { font-size: .78rem; color: var(--muted); margin-bottom: .75rem; display: flex; flex-direction: column; gap: .2rem; }
+    .card-meta p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-desc  { color: #9ca3af !important; white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .card-actions { display: flex; gap: .5rem; }
+    .btn-edit {
+      flex: 1; padding: .5rem; border-radius: var(--radius-lg);
+      border: 1.5px solid var(--border); background: #fff; color: var(--text);
+      font-weight: 600; font-size: .8rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: .35rem;
+      transition: background .15s;
+    }
+    .btn-edit:hover { background: var(--bg); }
+    .btn-del {
+      padding: .5rem .65rem; border-radius: var(--radius-lg);
+      border: 1.5px solid #fecaca; background: #fff; color: #f87171;
+      font-size: .9rem; cursor: pointer; transition: background .15s, color .15s;
+    }
+    .btn-del:hover { background: var(--red-light); color: var(--red); }
+
+    /* ── Empty / loading states ───────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 5rem 1rem;
+    }
+    .empty-state .big-icon { font-size: 3.5rem; margin-bottom: 1rem; }
+    .empty-state h2 { font-size: 1.2rem; margin-bottom: .5rem; }
+    .empty-state p  { color: var(--muted); font-size: .9rem; max-width: 320px; margin: 0 auto 2rem; }
+    .empty-actions  { display: flex; flex-direction: column; align-items: center; gap: .75rem; }
+    .loading-state  { text-align: center; padding: 5rem; color: var(--muted); font-size: 1.1rem; }
+    .no-results     { text-align: center; padding: 4rem; }
+    .no-results p   { color: var(--muted); margin-bottom: 1rem; }
+
+    /* ── Overlay / modal ──────────────────────────────────────────── */
+    .overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.5);
+      backdrop-filter: blur(4px);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 2rem 1rem; overflow-y: auto;
+    }
+    .modal {
+      background: var(--card); border-radius: 1.25rem;
+      box-shadow: var(--shadow-md); width: 100%; max-width: 520px;
+      margin: auto;
+    }
+    .modal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.1rem 1.25rem; border-bottom: 1px solid var(--border);
+    }
+    .modal-head h2 { font-size: 1.1rem; }
+
+    /* ── Place form ───────────────────────────────────────────────── */
+    #pform { padding: 1.25rem; display: flex; flex-direction: column; gap: .9rem; }
+    .field { display: flex; flex-direction: column; gap: .35rem; }
+    .field label { font-size: .8rem; font-weight: 600; color: #374151; }
+    .field input, .field select, .field textarea {
+      padding: .6rem .8rem; border: 1.5px solid var(--border);
+      border-radius: var(--radius-md); font-size: .875rem;
+      outline: none; background: #fff; color: var(--text);
+      transition: border-color .15s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: var(--green);
+    }
+    .field textarea { resize: none; }
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    #coord-map {
+      width: 100%; height: 200px; border-radius: var(--radius-lg);
+      border: 1.5px solid var(--border); overflow: hidden; margin-top: .35rem;
+    }
+    .map-hint { font-size: .75rem; color: var(--muted); margin-bottom: .35rem; }
+    .form-actions {
+      display: flex; gap: .75rem; padding-top: .25rem;
+    }
+    .form-actions .btn { flex: 1; justify-content: center; padding: .75rem; }
+
+    /* ── Delete confirm ───────────────────────────────────────────── */
+    .dialog {
+      background: var(--card); border-radius: 1.25rem;
+      box-shadow: var(--shadow-md); padding: 2rem;
+      max-width: 340px; width: 100%; text-align: center; margin: auto;
+    }
+    .dialog .big-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+    .dialog h3   { font-size: 1.1rem; margin-bottom: .5rem; }
+    .dialog p    { color: var(--muted); font-size: .875rem; margin-bottom: 1.5rem; line-height: 1.6; }
+    .dialog-btns { display: flex; gap: .75rem; }
+    .dialog-btns .btn { flex: 1; justify-content: center; }
+
+    /* ── Export modal ─────────────────────────────────────────────── */
+    .export-modal {
+      background: var(--card); border-radius: 1.25rem;
+      box-shadow: var(--shadow-md); width: 100%; max-width: 660px;
+      max-height: 80vh; display: flex; flex-direction: column; margin: auto;
+    }
+    .export-head {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .export-head h3   { font-size: 1rem; font-weight: 700; }
+    .export-head p    { font-size: .78rem; color: var(--muted); margin-top: .2rem; }
+    #exp-code {
+      flex: 1; overflow: auto; padding: 1rem 1.25rem;
+      font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem;
+      background: #f8f9fa; color: #24292e; white-space: pre; line-height: 1.6;
+    }
+    .export-foot {
+      padding: .875rem 1.25rem; border-top: 1px solid var(--border); flex-shrink: 0;
+      display: flex; justify-content: flex-end;
+    }
+
+    /* ── Toast ────────────────────────────────────────────────────── */
+    #toasts {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      z-index: 999; display: flex; flex-direction: column; align-items: center; gap: .5rem;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--green); color: #fff;
+      padding: .65rem 1.25rem; border-radius: 999px;
+      font-size: .875rem; font-weight: 600; box-shadow: var(--shadow-md);
+      animation: slideup .2s ease-out;
+    }
+    .toast-err { background: var(--red); }
+    @keyframes slideup {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Misc ─────────────────────────────────────────────────────── */
+    [hidden] { display: none !important; }
+    @media (max-width: 500px) {
+      .field-grid { grid-template-columns: 1fr; }
+      .header-actions .btn-ghost { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SETUP SCREEN
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="setup">
+  <div class="setup-card">
+    <div class="setup-icon">🗺️</div>
+    <h1>עורך מקומות JAS</h1>
+    <p>הכנס את פרטי Supabase כדי להתחיל</p>
+
+    <form class="setup-form" id="setup-form">
+      <label>
+        Supabase URL
+        <input id="sb-url" type="url" placeholder="https://xxxx.supabase.co" required autocomplete="off">
+      </label>
+      <label>
+        Anon Key
+        <input id="sb-key" type="text" placeholder="eyJhbGciOiJIUzI1NiIs..." required autocomplete="off">
+      </label>
+      <button type="submit" class="btn btn-primary" style="justify-content:center;padding:.75rem">התחבר →</button>
+    </form>
+
+    <p class="setup-note" style="margin-top:1.25rem">
+      מצא את הפרטים ב-Supabase: <code>Project Settings → API</code><br>
+      <br>
+      לאחר ההתחברות, לחץ <strong>"הורד לשיתוף"</strong> כדי להוריד
+      קובץ מוכן לשליחה לאחרים — הם פשוט יפתחו אותו.
+    </p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MAIN APP
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="app" hidden>
+
+  <!-- Header -->
+  <header id="app-header">
+    <div class="header-inner">
+      <div class="header-title">
+        <h1>🗺️ עורך מקומות — JAS Route</h1>
+        <p id="place-count">0 מקומות</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost" id="share-btn" onclick="downloadConfigured()" title="הורד קובץ מוגדר לשיתוף">📤 הורד לשיתוף</button>
+        <button class="btn btn-ghost" id="export-btn" onclick="showExport()" hidden>⬇ יצוא קוד</button>
+        <button class="btn btn-white" onclick="openModal(null)">+ מקום חדש</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Filter bar -->
+  <div id="filter-bar">
+    <div class="filter-inner">
+      <div class="search-wrap">
+        <span>🔍</span>
+        <input type="search" id="search-input" placeholder="חיפוש...">
+      </div>
+      <div class="pills" id="cat-pills"><!-- rendered by JS --></div>
+    </div>
+  </div>
+
+  <!-- Card grid / empty state -->
+  <main id="grid"></main>
+
+</div><!-- #app -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT / ADD MODAL
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="modal-overlay" class="overlay" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-title">מקום חדש</h2>
+      <button class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+
+    <form id="pform">
+      <div class="field">
+        <label for="f-name">שם המקום *</label>
+        <input id="f-name" name="name" type="text" required placeholder="לדוגמה: Cafe Zohar">
+      </div>
+
+      <div class="field">
+        <label for="f-sub">כותרת משנה</label>
+        <input id="f-sub" name="sub" type="text" placeholder="לדוגמה: קפה שכונתי">
+      </div>
+
+      <div class="field">
+        <label for="f-cat">קטגוריה</label>
+        <select id="f-cat" name="cat">
+          <option value="anchor">📍 Just a Second</option>
+          <option value="cafe">☕ קפה ואוכל</option>
+          <option value="photo">📷 צילום</option>
+          <option value="art">🎨 אמנות</option>
+          <option value="design">🏺 עיצוב ויצירה</option>
+          <option value="events">🏛️ מרחבים</option>
+          <option value="community">🚲 קהילה</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-desc">תיאור</label>
+        <textarea id="f-desc" name="desc" rows="3" placeholder="מה מיוחד במקום הזה?"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="f-address">כתובת</label>
+        <input id="f-address" name="address" type="text" placeholder="לדוגמה: נווה שאנן, ת״א">
+      </div>
+
+      <div class="field-grid">
+        <div class="field">
+          <label for="f-hours">שעות פתיחה</label>
+          <input id="f-hours" name="hours" type="text" placeholder="א׳–ו׳">
+        </div>
+        <div class="field">
+          <label for="f-contact">יצירת קשר</label>
+          <input id="f-contact" name="contact" type="text" placeholder="טלפון / אימייל">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>מיקום על המפה</label>
+        <p class="map-hint">לחץ על המפה כדי לסמן את המקום, או גרור את הסיכה</p>
+        <div id="coord-map"></div>
+        <div class="field-grid" style="margin-top:.6rem">
+          <div class="field">
+            <label for="f-lat">קו רוחב</label>
+            <input id="f-lat" name="lat" type="number" step="any" placeholder="32.062...">
+          </div>
+          <div class="field">
+            <label for="f-lng">קו אורך</label>
+            <input id="f-lng" name="lng" type="number" step="any" placeholder="34.778...">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary" id="save-btn">שמור</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     DELETE CONFIRM
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="del-overlay" class="overlay" hidden>
+  <div class="dialog">
+    <div class="big-icon">🗑️</div>
+    <h3>מחיקת מקום</h3>
+    <p id="del-msg"></p>
+    <div class="dialog-btns">
+      <button class="btn btn-outline" onclick="closeDelete()">ביטול</button>
+      <button class="btn btn-danger" id="del-confirm-btn">מחק</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EXPORT MODAL
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="exp-overlay" class="overlay" hidden>
+  <div class="export-modal">
+    <div class="export-head">
+      <div>
+        <h3>יצוא קוד — LOCS array</h3>
+        <p>העתק והדבק במקום <code>const LOCS = [...]</code> ב-index.html של המפה</p>
+      </div>
+      <button class="icon-btn" onclick="closeExport()">✕</button>
+    </div>
+    <pre id="exp-code"></pre>
+    <div class="export-foot">
+      <button class="btn btn-primary" id="copy-btn" onclick="copyExport()">העתק</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Toast container -->
+<div id="toasts"></div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SCRIPTS
+     ══════════════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Config (fill these in to skip the setup screen) ──────────────────────────
+const SUPABASE_URL = '';
+const SUPABASE_KEY = '';
+
+// ── Categories ────────────────────────────────────────────────────────────────
+const CATS = {
+  anchor:    { label: 'Just a Second', icon: '📍', color: '#3D5443' },
+  cafe:      { label: 'קפה ואוכל',     icon: '☕',  color: '#B8762A' },
+  photo:     { label: 'צילום',          icon: '📷',  color: '#3A6E8F' },
+  art:       { label: 'אמנות',          icon: '🎨',  color: '#7B4F9E' },
+  design:    { label: 'עיצוב ויצירה',   icon: '🏺',  color: '#3E7A4A' },
+  events:    { label: 'מרחבים',         icon: '🏛️',  color: '#2D7A7E' },
+  community: { label: 'קהילה',          icon: '🚲',  color: '#8A7A25' },
+};
+
+// ── Original 15 places (seed data) ───────────────────────────────────────────
+const SEED = [
+  { name:'Just A Second',    sub:'המרחב שלנו',               cat:'anchor',    lat:32.0620681, lng:34.7780304, desc:'מתחם שימוש חוזר ומיחדוש, יוצרים מהשפע הקיים. הנקודה המרכזית של JAS Route — כל המקומות סביבנו!',            hours:null,                    contact:null,                       address:'בגין 34, תל אביב'  },
+  { name:'Studio Oh',        sub:'סטודיו לתכשיטים ובגדים',   cat:'design',    lat:32.0625157, lng:34.7785068, desc:'סטודיו לעיצוב תכשיטים ייחודיים בלב השכונה. הגעה בתיאום מראש.',                                           hours:'א׳–ש׳ | בתיאום מראש',   contact:'rinatcr@gmail.com',        address:'נווה שאנן, ת״א'    },
+  { name:'סטודיו גברא',      sub:'בית ספר לצילום',           cat:'photo',     lat:32.0616858, lng:34.7778324, desc:'בית הספר הותיק לצילום בישראל — כ-60 שנה. קואופרטיב הצילום הראשון בישראל, עם חדר חושך וגלריה שיתופית.', hours:'א׳–ש׳ | בתיאום מראש',   contact:null,                       address:'נווה שאנן, ת״א'    },
+  { name:'דפנה לוי',         sub:'סטודיו לציור',             cat:'art',       lat:32.0617189, lng:34.7789975, desc:'סדנאות ציור חווייתיות לכל הרמות, ללא צורך בניסיון קודם.',                                                hours:'א׳–ש׳ | בתיאום מראש',   contact:'054-808-9921',             address:'נווה שאנן, ת״א'    },
+  { name:'פנימית',           sub:'סדנת אופניים שיתופית',     cat:'community', lat:32.0584161, lng:34.7623519, desc:'סדנת אופניים שיתופית — תקנו, השמישו ורכבו עם תמיכת הקהילה.',                                             hours:'א׳, ב׳, ה׳',            contact:null,                       address:'תל אביב'           },
+  { name:'סטודיו טל הראל',   sub:'אמנות ועיצוב תעשייתי',    cat:'art',       lat:32.06183,   lng:34.77875,   desc:'אמן ומעצב תעשייתי העוסק ב-ready-made, פיסול וקיימות.',                                                    hours:'א׳–ש׳ | בתיאום מראש',   contact:'054-488-2704',             address:'נווה שאנן, ת״א'    },
+  { name:'1of Studio',       sub:'עיצוב רהיטים בשימוש חוזר', cat:'design',   lat:32.06215,   lng:34.77820,   desc:'סטודיו לעיצוב ובנייה של רהיטים מחומרים בשימוש חוזר. כל פריט הוא יחיד.',                                  hours:'א׳–ו׳ | בתיאום מראש',   contact:'050-689-9101',             address:'נווה שאנן, ת״א'    },
+  { name:'שחור לבן',         sub:'סטודיו צילום וחדר חושך',   cat:'photo',     lat:32.06136,   lng:34.77803,   desc:'סטודיו צילום מקצועי, סדנאות וחדר חושך לחובבי הצילום האנלוגי.',                                           hours:'א׳–ו׳ | בתיאום מראש',   contact:'054-303-3704',             address:'נווה שאנן, ת״א'    },
+  { name:'תמוז Tamuz',       sub:'חנות משק מבשלת',           cat:'cafe',      lat:32.0673282, lng:34.7724947, desc:'חנות משק מבשלת בלב העיר — מוצרים מקומיים ואיכותיים.',                                                     hours:'א׳–ש׳',                 contact:null,                       address:'לבונטין, ת״א'      },
+  { name:'Cafe Zohar',       sub:'קפה שכונתי',               cat:'cafe',      lat:32.0599296, lng:34.7807971, desc:'בית קפה שכונתי בנווה שאנן — קטן, טעים ובוטיקי.',                                                         hours:null,                    contact:null,                       address:'נווה שאנן, ת״א'    },
+  { name:'גלריה נעם',        sub:'גלריה לאמנות עכשווית',     cat:'art',       lat:32.06143,   lng:34.77810,   desc:'גלריה לאמנות עכשווית עם ליווי אצרותי מקצועי, הפקת תערוכות וסטודיו.',                                      hours:'א׳–ו׳ | בתיאום מראש',   contact:null,                       address:'נווה שאנן, ת״א'    },
+  { name:'סטודיו דקלה יובל', sub:'אמנות ומיינדפולנס',        cat:'art',       lat:32.06195,   lng:34.77885,   desc:'סדנאות יצירה בשילוב תרגול מיינדפולנס — לאישי, זוגות וקבוצות.',                                           hours:'א׳, ג׳–ו׳ | בתיאום מראש', contact:'050-350-6099',           address:'נווה שאנן, ת״א'    },
+  { name:'אברהם הוסטל',      sub:'Abraham Hostel Tel Aviv',  cat:'events',    lat:32.0632912, lng:34.7762937, desc:'לאונג׳ ענק, גג ירוק עם בר שכונתי, חדר כושר, סטודיו ריקוד ואמבטיות קרח.',                                hours:'א׳–ש׳ | פתוח תמיד',     contact:null,                       address:'לבונטין 21, ת״א'   },
+  { name:'סטודיו סמואל',     sub:'עיצוב קרמיקה תלת-מימדי',  cat:'design',    lat:32.0616784, lng:34.7785752, desc:'עיצוב קרמיקה בהדפסה תלת-מימדית + סדנאות מקצועיות לכל הרמות.',                                           hours:'א׳–ב׳, ג׳, ה׳, ש׳ | בתיאום', contact:'050-316-1527',        address:'נווה שאנן, ת״א'    },
+  { name:'שה שנטל',          sub:'Café Chantal',              cat:'cafe',      lat:32.0626756, lng:34.7756166, desc:'פריז בתל אביב — מאפים טריים, כריכים ואווירה צרפתית רכה.',                                                 hours:'א׳–ו׳',                 contact:'Chantal.sherez@gmail.com', address:'לבונטין, ת״א'      },
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let db, places = [], editId = null, catFilter = 'all', searchQ = '';
+let mapInst = null, mapPin = null, pendingDelId = null;
+let _origHTML = ''; // captured before any DOM changes, used for shareable download
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  _origHTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+  const url = SUPABASE_URL || localStorage.getItem('sb_url') || '';
+  const key = SUPABASE_KEY || localStorage.getItem('sb_key') || '';
+
+  if (url && key) {
+    connect(url, key);
+  }
+  // else: setup screen is shown by default
+});
+
+// ── Setup form ────────────────────────────────────────────────────────────────
+document.getElementById('setup-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  connect(url, key);
+});
+
+async function connect(url, key) {
+  db = supabase.createClient(url, key);
+  document.getElementById('setup').hidden = true;
+  document.getElementById('app').hidden   = false;
+  await loadPlaces();
+}
+
+// ── Load & render places ──────────────────────────────────────────────────────
+async function loadPlaces() {
+  setGrid('<div class="loading-state">⏳ טוען מקומות...</div>');
+  const { data, error } = await db.from('places').select('*').order('id');
+  if (error) { toast('שגיאה בטעינת מקומות', true); return; }
+  places = data || [];
+  renderAll();
+}
+
+function renderAll() {
+  renderPlaces();
+  renderPills();
+  document.getElementById('place-count').textContent = places.length + ' מקומות';
+  document.getElementById('export-btn').hidden = places.length === 0;
+}
+
+function renderPlaces() {
+  const q = searchQ.toLowerCase();
+  const filtered = places.filter(p =>
+    (catFilter === 'all' || p.cat === catFilter) &&
+    (!q || p.name.toLowerCase().includes(q) ||
+          (p.address || '').toLowerCase().includes(q) ||
+          (p.sub     || '').toLowerCase().includes(q))
+  );
+
+  if (places.length === 0) {
+    setGrid(emptyHtml()); return;
+  }
+  if (filtered.length === 0) {
+    setGrid(`<div class="no-results">
+      <p>לא נמצאו תוצאות עבור "${esc(searchQ)}"</p>
+      <button class="btn btn-outline" onclick="clearFilters()">נקה פילטרים</button>
+    </div>`); return;
+  }
+  setGrid('<div class="card-grid">' + filtered.map(cardHtml).join('') + '</div>');
+}
+
+function cardHtml(p) {
+  const c = CATS[p.cat] || CATS.anchor;
+  return `<div class="place-card">
+    <div class="card-strip" style="background:${c.color}"></div>
+    <div class="card-body">
+      <div class="card-top">
+        <span class="cat-icon">${c.icon}</span>
+        <div class="card-info">
+          <strong>${esc(p.name)}</strong>
+          ${p.sub ? `<span class="card-sub">${esc(p.sub)}</span>` : ''}
+          <span class="cat-badge" style="background:${c.color}22;color:${c.color}">${c.label}</span>
+        </div>
+      </div>
+      <div class="card-meta">
+        ${p.address ? `<p>📍 ${esc(p.address)}</p>` : ''}
+        ${p.hours   ? `<p>🕐 ${esc(p.hours)}</p>`   : ''}
+        ${p.contact ? `<p>📞 ${esc(p.contact)}</p>`  : ''}
+        ${p.desc    ? `<p class="card-desc">${esc(p.desc)}</p>` : ''}
+      </div>
+      <div class="card-actions">
+        <button class="btn-edit" onclick="openModal(${p.id})">✏️ עריכה</button>
+        <button class="btn-del"  onclick="confirmDelete(${p.id}, '${esc(p.name)}')">🗑️</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function emptyHtml() {
+  return `<div class="empty-state">
+    <div class="big-icon">🗺️</div>
+    <h2>אין מקומות עדיין</h2>
+    <p>הוסף מקום ידנית, או טען את 15 המקומות המקוריים מהמפה</p>
+    <div class="empty-actions">
+      <button class="btn btn-primary" onclick="openModal(null)">+ מקום חדש</button>
+      <button class="btn btn-outline" onclick="seedPlaces()" id="seed-btn">📥 טען 15 מקומות מקוריים</button>
+    </div>
+  </div>`;
+}
+
+// ── Category pills ────────────────────────────────────────────────────────────
+function renderPills() {
+  const counts = {};
+  places.forEach(p => { counts[p.cat] = (counts[p.cat] || 0) + 1; });
+
+  const allPill = `<button class="pill${catFilter==='all' ? ' active' : ''}" onclick="setFilter('all')">הכל (${places.length})</button>`;
+  const catPills = Object.entries(CATS)
+    .filter(([k]) => counts[k])
+    .map(([k, c]) => `<button class="pill${catFilter===k ? ' active' : ''}" onclick="setFilter('${k}')">${c.icon} ${c.label} (${counts[k]})</button>`)
+    .join('');
+
+  document.getElementById('cat-pills').innerHTML = allPill + catPills;
+}
+
+function setFilter(cat) { catFilter = cat; renderAll(); }
+function clearFilters()  { catFilter = 'all'; searchQ = ''; document.getElementById('search-input').value = ''; renderAll(); }
+
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQ = e.target.value.trim();
+  renderPlaces();
+});
+
+// ── Modal open / close ────────────────────────────────────────────────────────
+function openModal(id) {
+  const p = id ? places.find(x => x.id === id) : null;
+  editId = id || null;
+
+  document.getElementById('modal-title').textContent = p ? `עריכת "${p.name}"` : 'הוספת מקום חדש';
+  document.getElementById('save-btn').textContent = p ? 'עדכן' : 'הוסף';
+
+  const f = document.getElementById('pform');
+  f.name.value    = p?.name    || '';
+  f.sub.value     = p?.sub     || '';
+  f.cat.value     = p?.cat     || 'art';
+  f.desc.value    = p?.desc    || '';
+  f.address.value = p?.address || '';
+  f.hours.value   = p?.hours   || '';
+  f.contact.value = p?.contact || '';
+  f.lat.value     = p?.lat     ?? 32.0621;
+  f.lng.value     = p?.lng     ?? 34.778;
+
+  document.getElementById('modal-overlay').hidden = false;
+  // give browser a frame to render the modal before mounting Leaflet
+  setTimeout(initMap, 80);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').hidden = true;
+  if (mapInst) { mapInst.remove(); mapInst = null; mapPin = null; }
+}
+
+// ── Leaflet coordinate picker ─────────────────────────────────────────────────
+function initMap() {
+  const lat = parseFloat(document.getElementById('f-lat').value) || 32.0621;
+  const lng = parseFloat(document.getElementById('f-lng').value) || 34.778;
+
+  const container = document.getElementById('coord-map');
+  if (mapInst) mapInst.remove();
+  mapInst = L.map(container, { center: [lat, lng], zoom: 16 });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '© OSM contributors © CARTO', maxZoom: 19,
+  }).addTo(mapInst);
+
+  placePin(lat, lng);
+
+  mapInst.on('click', e => setCoords(e.latlng.lat, e.latlng.lng));
+}
+
+function placePin(lat, lng) {
+  if (mapPin) {
+    mapPin.setLatLng([lat, lng]);
+  } else {
+    mapPin = L.marker([lat, lng], { draggable: true }).addTo(mapInst);
+    mapPin.on('dragend', () => {
+      const pos = mapPin.getLatLng();
+      setCoords(pos.lat, pos.lng);
+    });
+  }
+}
+
+function setCoords(lat, lng) {
+  document.getElementById('f-lat').value = lat.toFixed(7);
+  document.getElementById('f-lng').value = lng.toFixed(7);
+  placePin(lat, lng);
+}
+
+// sync manual lat/lng input → map pin
+document.getElementById('pform').addEventListener('input', e => {
+  if ((e.target.name === 'lat' || e.target.name === 'lng') && mapInst) {
+    const lat = parseFloat(document.getElementById('f-lat').value);
+    const lng = parseFloat(document.getElementById('f-lng').value);
+    if (!isNaN(lat) && !isNaN(lng)) placePin(lat, lng);
+  }
+});
+
+// ── Save place ────────────────────────────────────────────────────────────────
+document.getElementById('pform').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f   = e.target;
+  const btn = document.getElementById('save-btn');
+
+  const payload = {
+    name:    f.name.value.trim(),
+    sub:     f.sub.value.trim(),
+    cat:     f.cat.value,
+    desc:    f.desc.value.trim(),
+    address: f.address.value.trim(),
+    hours:   f.hours.value.trim()   || null,
+    contact: f.contact.value.trim() || null,
+    lat:     parseFloat(f.lat.value) || 0,
+    lng:     parseFloat(f.lng.value) || 0,
+  };
+
+  btn.textContent = 'שומר...';
+  btn.disabled = true;
+
+  const { error } = editId
+    ? await db.from('places').update(payload).eq('id', editId)
+    : await db.from('places').insert([payload]);
+
+  btn.disabled = false;
+  btn.textContent = editId ? 'עדכן' : 'הוסף';
+
+  if (error) { toast('שגיאה בשמירה', true); return; }
+  toast(editId ? 'המקום עודכן ✓' : 'המקום נוסף ✓');
+  closeModal();
+  await loadPlaces();
+});
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+function confirmDelete(id, name) {
+  pendingDelId = id;
+  document.getElementById('del-msg').innerHTML =
+    `האם למחוק את "<strong>${esc(name)}</strong>"?<br>לא ניתן לשחזר.`;
+  document.getElementById('del-overlay').hidden = false;
+}
+
+function closeDelete() {
+  pendingDelId = null;
+  document.getElementById('del-overlay').hidden = true;
+}
+
+document.getElementById('del-confirm-btn').addEventListener('click', async () => {
+  if (!pendingDelId) return;
+  const { error } = await db.from('places').delete().eq('id', pendingDelId);
+  if (error) { toast('שגיאה במחיקה', true); return; }
+  toast('המקום נמחק');
+  closeDelete();
+  await loadPlaces();
+});
+
+// ── Seed initial places ───────────────────────────────────────────────────────
+async function seedPlaces() {
+  const btn = document.getElementById('seed-btn');
+  if (btn) { btn.textContent = '⏳ טוען...'; btn.disabled = true; }
+
+  const { error } = await db.from('places').insert(SEED);
+
+  if (error) {
+    toast('שגיאה בטעינת נתונים ראשוניים', true);
+    if (btn) { btn.textContent = '📥 טען 15 מקומות מקוריים'; btn.disabled = false; }
+    return;
+  }
+  toast('15 המקומות נוספו!');
+  await loadPlaces();
+}
+
+// ── Export LOCS code ──────────────────────────────────────────────────────────
+function showExport() {
+  const code = 'const LOCS = ' + JSON.stringify(
+    places.map(({ id, name, sub, cat, lat, lng, desc, hours, contact, address }) =>
+      ({ id, name, sub, cat, lat, lng, desc, hours, contact, address })
+    ), null, 2
+  ) + ';';
+  document.getElementById('exp-code').textContent = code;
+  document.getElementById('exp-overlay').hidden = false;
+}
+
+function closeExport() { document.getElementById('exp-overlay').hidden = true; }
+
+function copyExport() {
+  navigator.clipboard.writeText(document.getElementById('exp-code').textContent);
+  const btn = document.getElementById('copy-btn');
+  btn.textContent = '✓ הועתק!';
+  setTimeout(() => btn.textContent = 'העתק', 2000);
+}
+
+// ── Download shareable pre-configured file ────────────────────────────────────
+function downloadConfigured() {
+  const url = localStorage.getItem('sb_url') || SUPABASE_URL;
+  const key = localStorage.getItem('sb_key') || SUPABASE_KEY;
+
+  if (!url || !key) { toast('התחבר קודם כדי לשמור קובץ לשיתוף', true); return; }
+
+  // Inject credentials into the captured original HTML source
+  let content = _origHTML
+    .replace("const SUPABASE_URL = '';", `const SUPABASE_URL = '${url}';`)
+    .replace("const SUPABASE_KEY = '';", `const SUPABASE_KEY = '${key}';`);
+
+  const blob = new Blob([content], { type: 'text/html; charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'place-editor.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast('הקובץ הורד — שלח אותו לאחרים!');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, isErr = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' toast-err' : '');
+  el.textContent = (isErr ? '✕ ' : '✓ ') + msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setGrid(html) { document.getElementById('grid').innerHTML = html; }
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>
