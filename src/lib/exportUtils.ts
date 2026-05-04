@@ -3,17 +3,35 @@
  * Used by GlobalStatistics page for data export
  */
 
-// Category translations for exports
-const CATEGORY_TRANSLATIONS: Record<string, string> = {
-  wood: 'עץ',
-  metal: 'מתכת',
-  plastic: 'פלסטיק',
-  glass: 'זכוכית',
-  aluminum: 'אלומיניום',
-  textile: 'טקסטיל',
-  electrical: 'חשמל',
-  other: 'אחר',
+// English category names used in PDF (Helvetica has no Hebrew glyphs)
+const CATEGORY_EN: Record<string, string> = {
+  wood: 'Wood', metal: 'Metal', plastic: 'Plastic', glass: 'Glass',
+  aluminum: 'Aluminum', textile: 'Textile', electrical: 'Electrical', other: 'Other',
 };
+
+// Hebrew category labels for CSV/Excel exports
+const CATEGORY_TRANSLATIONS: Record<string, string> = {
+  wood: 'עץ', metal: 'מתכת', plastic: 'פלסטיק', glass: 'זכוכית',
+  aluminum: 'אלומיניום', textile: 'טקסטיל', electrical: 'חשמל', other: 'אחר',
+};
+
+// Strip non-ASCII so Helvetica never sees a Hebrew glyph
+function lat(s: string): string { return s.replace(/[^\x00-\x7F]/g, '').trim(); }
+
+// ASCII-safe project name
+function safeProject(name: string): string {
+  const a = lat(name);
+  return a.length >= 2 ? a : 'All Projects';
+}
+
+// ASCII-safe item description — falls back to category + weight
+function safeDesc(item: ExportItem): string {
+  const d = lat(item.description || '');
+  if (d.length >= 3) return d.slice(0, 32);
+  const cat = CATEGORY_EN[item.material_category] || item.material_category || 'Item';
+  const kg = item.estimated_weight_kg ? ` · ${item.estimated_weight_kg}kg` : '';
+  return `${cat}${kg}`;
+}
 
 interface ExportItem {
   id: string;
@@ -193,57 +211,49 @@ export async function exportToPDF(
     format: 'a4',
   });
 
-  // RTL support - we'll use LTR layout but with Hebrew text
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
 
-  // Colors (JAS brand)
-  const forestColor = [51, 61, 54] as [number, number, number];
-  const sageColor = [181, 201, 173] as [number, number, number];
-  const creamColor = [255, 252, 245] as [number, number, number];
-  const orangeColor = [232, 130, 37] as [number, number, number];
+  const forestColor  = [51, 61, 54]   as [number, number, number];
+  const sageColor    = [181, 201, 173] as [number, number, number];
+  const creamColor   = [255, 252, 245] as [number, number, number];
+  const orangeColor  = [232, 130, 37]  as [number, number, number];
 
-  // Background
+  const projectName = selectedProject === 'all'
+    ? 'All Projects'
+    : safeProject(projects.find((p) => p.id === selectedProject)?.name || '');
+
+  const dateStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+
+  // ── Background ────────────────────────────────────────────────────────────
   doc.setFillColor(...creamColor);
   doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-  // Header bar
+  // ── Header bar ────────────────────────────────────────────────────────────
   doc.setFillColor(...forestColor);
-  doc.rect(0, 0, pageWidth, 35, 'F');
+  doc.rect(0, 0, pageWidth, 36, 'F');
 
-  // Title
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
-  doc.text('Just A Second', pageWidth / 2, 15, { align: 'center' });
-  doc.setFontSize(12);
-  doc.text('דוח סטטיסטיקות', pageWidth / 2, 25, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.text('Just A Second', pageWidth / 2, 13, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Statistics Report  ·  ' + projectName, pageWidth / 2, 23, { align: 'center' });
+  doc.setFontSize(8);
+  doc.text(dateStr, pageWidth - margin, 31, { align: 'right' });
 
-  // Date
-  doc.setFontSize(9);
-  const dateStr = new Date().toLocaleDateString('he-IL');
-  doc.text(dateStr, pageWidth - margin, 30, { align: 'right' });
+  let yPos = 46;
 
-  let yPos = 45;
-
-  // Project info
-  doc.setTextColor(...forestColor);
-  doc.setFontSize(14);
-  const projectName =
-    selectedProject === 'all'
-      ? 'כל הפרויקטים'
-      : projects.find((p) => p.id === selectedProject)?.name || 'פרויקט';
-  doc.text(projectName, pageWidth - margin, yPos, { align: 'right' });
-  yPos += 12;
-
-  // KPI Cards
+  // ── KPI Cards ─────────────────────────────────────────────────────────────
   const kpiWidth = (pageWidth - margin * 2 - 15) / 4;
-  const kpiHeight = 25;
+  const kpiHeight = 26;
   const kpis = [
-    { label: 'סה"כ פריטים', value: stats.totalItems.toString(), color: forestColor },
-    { label: 'נאספו', value: stats.collected.toString(), color: sageColor },
-    { label: 'ממתינים', value: stats.pending.toString(), color: orangeColor },
-    { label: 'CO₂ נחסך', value: `${Math.round(stats.totalCO2)} ק"ג`, color: forestColor },
+    { label: 'Total Items',      value: stats.totalItems.toString(),             color: forestColor },
+    { label: 'Collected',        value: stats.collected.toString(),               color: sageColor   },
+    { label: 'Pending',          value: stats.pending.toString(),                 color: orangeColor },
+    { label: 'CO2 Saved',        value: `${Math.round(stats.totalCO2)} kg`,      color: forestColor },
   ];
 
   kpis.forEach((kpi, i) => {
@@ -251,95 +261,78 @@ export async function exportToPDF(
     doc.setFillColor(...(kpi.color as [number, number, number]));
     doc.roundedRect(x, yPos, kpiWidth, kpiHeight, 3, 3, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
     doc.text(kpi.label, x + kpiWidth / 2, yPos + 8, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text(kpi.value, x + kpiWidth / 2, yPos + 18, { align: 'center' });
+    doc.text(kpi.value, x + kpiWidth / 2, yPos + 19, { align: 'center' });
   });
 
-  yPos += kpiHeight + 15;
+  yPos += kpiHeight + 12;
 
-  // Category breakdown table
+  // ── Category breakdown table ───────────────────────────────────────────────
   doc.setTextColor(...forestColor);
-  doc.setFontSize(12);
-  doc.text('פירוט לפי קטגוריה', pageWidth - margin, yPos, { align: 'right' });
-  yPos += 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('Material Breakdown', margin, yPos);
+  yPos += 6;
 
   const tableData = stats.materialChartData.map((cat) => [
-    cat.name,
+    CATEGORY_EN[cat.name] || cat.name,
     cat.count.toString(),
     `${cat.percentage}%`,
-    `${cat.weight} ק"ג`,
-    `${cat.co2} ק"ג`,
+    `${cat.weight} kg`,
+    `${cat.co2} kg`,
   ]);
 
   (doc as any).autoTable({
     startY: yPos,
-    head: [['קטגוריה', 'פריטים', 'אחוז', 'משקל', 'CO₂ נחסך']],
+    head: [['Category', 'Items', 'Share', 'Weight', 'CO2 Saved']],
     body: tableData,
     theme: 'grid',
-    headStyles: {
-      fillColor: forestColor,
-      textColor: [255, 255, 255],
-      halign: 'center',
-      fontSize: 9,
-    },
-    bodyStyles: {
-      halign: 'center',
-      fontSize: 8,
-    },
-    alternateRowStyles: {
-      fillColor: [245, 245, 240],
-    },
+    headStyles: { fillColor: forestColor, textColor: [255,255,255], halign: 'center', fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { halign: 'center', fontSize: 8 },
+    alternateRowStyles: { fillColor: [245, 245, 240] },
     margin: { left: margin, right: margin },
-    tableWidth: 'auto',
   });
 
-  yPos = (doc as any).lastAutoTable.finalY + 15;
+  yPos = (doc as any).lastAutoTable.finalY + 12;
 
-  // Items summary (top 20)
-  if (yPos < pageHeight - 80) {
+  // ── Recent items table ─────────────────────────────────────────────────────
+  if (yPos < pageHeight - 60) {
     doc.setTextColor(...forestColor);
-    doc.setFontSize(12);
-    doc.text('פריטים אחרונים (עד 20)', pageWidth - margin, yPos, { align: 'right' });
-    yPos += 8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Item List (up to 20)', margin, yPos);
+    yPos += 6;
 
     const itemsTableData = stats.items.slice(0, 20).map((item) => [
-      item.description.substring(0, 30) + (item.description.length > 30 ? '...' : ''),
+      safeDesc(item),
       item.quantity.toString(),
-      CATEGORY_TRANSLATIONS[item.material_category] || item.material_category,
-      item.collected ? 'כן' : 'לא',
+      CATEGORY_EN[item.material_category] || item.material_category,
+      item.collected ? 'Yes' : 'No',
     ]);
 
     (doc as any).autoTable({
       startY: yPos,
-      head: [['תיאור', 'כמות', 'קטגוריה', 'נאסף']],
+      head: [['Description', 'Qty', 'Category', 'Collected']],
       body: itemsTableData,
       theme: 'striped',
-      headStyles: {
-        fillColor: sageColor,
-        textColor: forestColor,
-        halign: 'center',
-        fontSize: 8,
-      },
-      bodyStyles: {
-        halign: 'center',
-        fontSize: 7,
-      },
+      headStyles: { fillColor: sageColor, textColor: forestColor, halign: 'center', fontSize: 8, fontStyle: 'bold' },
+      bodyStyles: { halign: 'center', fontSize: 7.5 },
       margin: { left: margin, right: margin },
     });
   }
 
-  // Footer
+  // ── Footer ────────────────────────────────────────────────────────────────
   doc.setFillColor(...forestColor);
-  doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
+  doc.rect(0, pageHeight - 12, pageWidth, 12, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
-  doc.text('Just A Second - Furniture Collect', pageWidth / 2, pageHeight - 6, {
-    align: 'center',
-  });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text('Just A Second · Furniture Collect · CONFIDENTIAL', pageWidth / 2, pageHeight - 4, { align: 'center' });
 
-  // Save
   doc.save(`${filename}.pdf`);
 }
 
