@@ -57,11 +57,13 @@ async function loadHeeboFont(doc: jsPDF): Promise<void> {
       fetch('/fonts/Heebo-Regular.ttf'),
       fetch('/fonts/Heebo-Bold.ttf'),
     ]);
+    if (!rRes.ok || !bRes.ok) throw new Error('Font fetch failed');
     const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
     doc.addFileToVFS('Heebo-Regular.ttf', toBase64(rBuf));
     doc.addFont('Heebo-Regular.ttf', 'Heebo', 'normal');
     doc.addFileToVFS('Heebo-Bold.ttf', toBase64(bBuf));
     doc.addFont('Heebo-Bold.ttf', 'Heebo', 'bold');
+    doc.setFont('Heebo', 'normal'); // make it the active font
   } catch {
     // Falls back to Helvetica — English only
   }
@@ -549,7 +551,7 @@ function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
       c.label, c.count, `${c.pct.toFixed(1)}%`, c.weight.toFixed(1),
       `${(CO2[c.name]||1).toFixed(1)} kg/kg`,
     ]),
-    theme:'striped', styles:{font:'Heebo'},
+    theme:'striped',
     headStyles:{fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:8},
     bodyStyles:{fontSize:8},
     columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},
@@ -809,7 +811,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
       ['Items not yet collected (flagged for collection)', uncollected.length, uncollected.length>10?'HIGH':'MEDIUM'],
       ['Collected items with no attribution', noAttribution.length, noAttribution.length>5?'HIGH':'LOW'],
     ],
-    theme:'grid', styles:{font:'Heebo'},
+    theme:'grid',
     headStyles:{fillColor:C.navy,textColor:C.white,fontStyle:'bold',fontSize:8},
     bodyStyles:{fontSize:8.5},
     columnStyles:{1:{halign:'right',cellWidth:22},2:{halign:'center',cellWidth:22}},
@@ -841,7 +843,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
         CATEGORY_EN[i.material_category]||i.material_category||'—',
         ((i.estimated_weight_kg||0)*(i.quantity||1)).toFixed(1),
       ]),
-      theme:'striped', styles:{font:'Heebo'},
+      theme:'striped',
       headStyles:{fillColor:C.amber,textColor:C.white,fontStyle:'bold',fontSize:8},
       bodyStyles:{fontSize:8},
       columnStyles:{1:{halign:'right'},3:{halign:'right'}},
