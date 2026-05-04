@@ -1,826 +1,846 @@
 /**
- * Executive PDF Report Generator
- * Professional Selective Deconstruction Report — English text throughout
- * (jsPDF's built-in fonts have no Hebrew support; English ensures clean output)
+ * Executive PDF Report — McKinsey-style Selective Deconstruction Report
+ * English throughout (jsPDF built-in fonts have no Hebrew glyph support)
+ *
+ * Pages:
+ *  1. Cover — project identity + live KPI preview
+ *  2. Executive Summary — KPIs + key insights
+ *  3. Material Breakdown — donut chart + full table
+ *  4. Collection Performance — rate gauge + status bars
+ *  5. Team Performance — collector leaderboard
+ *  6. Environmental Impact — CO2 / water / landfill cards
+ *  7. Issues & Recommendations — action items
  */
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const COLORS = {
-  primary: '#1E3A5F',
-  secondary: '#3B82F6',
-  accent: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  text: '#1F2937',
-  textLight: '#6B7280',
-  background: '#F9FAFB',
-  white: '#FFFFFF',
+// ─── Design tokens ───────────────────────────────────────────────────────────
+const C = {
+  navy:    [30,  58,  95]  as [number,number,number],
+  blue:    [59, 130, 246]  as [number,number,number],
+  green:   [16, 185, 129]  as [number,number,number],
+  amber:   [245,158,  11]  as [number,number,number],
+  red:     [239,  68,  68] as [number,number,number],
+  ink:     [31,  41,  55]  as [number,number,number],
+  muted:   [107,114,128]   as [number,number,number],
+  light:   [249,250,251]   as [number,number,number],
+  white:   [255,255,255]   as [number,number,number],
+  slate:   [229,231,235]   as [number,number,number],
 };
 
-// English category labels for the PDF
-const CATEGORY_LABELS_EN: Record<string, string> = {
-  wood: 'Wood',
-  metal: 'Metal',
-  plastic: 'Plastic',
-  glass: 'Glass',
-  aluminum: 'Aluminum',
-  textile: 'Textile',
-  electrical: 'Electrical',
-  other: 'Other',
+const PALETTE = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#F97316','#EC4899'];
+
+const CATEGORY_EN: Record<string,string> = {
+  wood:'Wood', metal:'Metal', plastic:'Plastic', glass:'Glass',
+  aluminum:'Aluminum', textile:'Textile', electrical:'Electrical', other:'Other',
 };
 
-const CO2_FACTORS: Record<string, number> = {
-  wood: 0.5,
-  metal: 2.5,
-  plastic: 3.0,
-  glass: 0.8,
-  aluminum: 8.0,
-  textile: 1.5,
-  electrical: 2.0,
-  other: 1.0,
+const CO2: Record<string,number> = {
+  wood:0.5, metal:2.5, plastic:3.0, glass:0.8,
+  aluminum:8.0, textile:1.5, electrical:2.0, other:1.0,
 };
 
-interface ReportData {
+// ─── Public interface ─────────────────────────────────────────────────────────
+export interface ReportData {
   projectName: string;
   projectAddress: string;
   items: any[];
   apartments?: any[];
-  collectors?: { name: string; count: number }[];
-}
-
-interface CategoryStats {
-  name: string;
-  label: string;
-  count: number;
-  weight: number;
-  percentage: number;
 }
 
 export async function generateExecutiveReport(data: ReportData): Promise<void> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 18;          // page margin
+  const CW = W - M * 2;  // content width
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const contentWidth = pageWidth - margin * 2;
+  const s   = calcStats(data.items);
+  const cats = calcCategories(data.items);
+  const cols = calcCollectors(data.items);
+  const tips = buildInsights(s, cats, cols);
 
-  const stats = calculateStats(data.items);
-  const categoryStats = calculateCategoryStats(data.items);
-  const collectorStats = calculateCollectorStats(data.items);
-  const insights = generateInsights(stats, categoryStats, collectorStats);
+  const TOTAL_PAGES = 7;
+  const project = data.projectName || 'Project';
 
-  renderCoverPage(doc, data, pageWidth, pageHeight);
+  // Page 1 — Cover (no footer)
+  pageCover(doc, data, W, H, s);
 
-  doc.addPage();
-  renderExecutiveSummary(doc, stats, insights, margin, contentWidth);
+  // Pages 2–7 — content with footer
+  const pages: [string, (d:jsPDF)=>void][] = [
+    ['Executive Summary',       d => pageExecSummary(d, s, tips, M, CW)],
+    ['Material Breakdown',      d => pageMaterials(d, cats, M, CW)],
+    ['Collection Performance',  d => pageCollection(d, s, M, CW)],
+    ['Team Performance',        d => pageTeam(d, cols, s, M, CW)],
+    ['Environmental Impact',    d => pageEnvironment(d, s, M, CW)],
+    ['Issues & Recommendations',d => pageIssues(d, data.items, M, CW)],
+  ];
 
-  doc.addPage();
-  renderMaterialBreakdown(doc, categoryStats, margin, contentWidth);
-
-  doc.addPage();
-  renderCollectionPerformance(doc, stats, margin, contentWidth);
-
-  doc.addPage();
-  renderTeamPerformance(doc, collectorStats, stats, margin, contentWidth);
-
-  doc.addPage();
-  renderEnvironmentalImpact(doc, stats, margin, contentWidth);
-
-  doc.addPage();
-  renderIssuesAndOpportunities(doc, data.items, margin, contentWidth);
-
-  const safeProjectName = data.projectName.replace(/[^\w\s-]/g, '').trim() || 'Project';
-  const dateStr = new Date().toISOString().split('T')[0];
-  doc.save(`Selective_Deconstruction_Report_${safeProjectName}_${dateStr}.pdf`);
-}
-
-function calculateStats(items: any[]) {
-  const totalItems = items.reduce((sum, i) => sum + (i.quantity || 1), 0);
-  const collectedItems = items.filter(i => i.collected).reduce((sum, i) => sum + (i.quantity || 1), 0);
-  const notCollectedItems = items
-    .filter(i => !i.collected && i.intended_for_collection)
-    .reduce((sum, i) => sum + (i.quantity || 1), 0);
-  const totalWeight = items.reduce(
-    (sum, i) => sum + (i.estimated_weight_kg || 0) * (i.quantity || 1),
-    0
-  );
-
-  let co2Saved = 0;
-  items.filter(i => i.collected).forEach(item => {
-    const factor = CO2_FACTORS[item.material_category] || 1;
-    co2Saved += (item.estimated_weight_kg || 0) * factor * (item.quantity || 1);
+  pages.forEach(([title, render], i) => {
+    doc.addPage();
+    sectionHeader(doc, title, W);
+    render(doc);
+    addFooter(doc, i + 2, TOTAL_PAGES, project, W, H);
   });
 
-  const waterSaved = totalWeight * 150;
-  const landfillAvoided = totalWeight * 0.85;
+  const safe = project.replace(/[^\w\s-]/g, '').trim() || 'Project';
+  const date = new Date().toISOString().split('T')[0];
+  doc.save(`Executive_Report_${safe}_${date}.pdf`);
+}
 
+// ─── Stats helpers ─────────────────────────────────────────────────────────────
+function calcStats(items: any[]) {
+  const total      = items.reduce((s,i) => s + (i.quantity||1), 0);
+  const collected  = items.filter(i=>i.collected).reduce((s,i)=>s+(i.quantity||1),0);
+  const pending    = items.filter(i=>!i.collected&&i.intended_for_collection).reduce((s,i)=>s+(i.quantity||1),0);
+  const weight     = items.reduce((s,i)=>s+(i.estimated_weight_kg||0)*(i.quantity||1),0);
+  let co2 = 0;
+  items.filter(i=>i.collected).forEach(i=>{
+    co2 += (i.estimated_weight_kg||0)*(CO2[i.material_category]||1)*(i.quantity||1);
+  });
   return {
-    totalItems,
-    collectedItems,
-    notCollectedItems,
-    collectionRate: totalItems > 0 ? (collectedItems / totalItems) * 100 : 0,
-    totalWeight,
-    co2Saved,
-    waterSaved,
-    landfillAvoided,
-    treesEquivalent: Math.round(co2Saved / 21),
+    total, collected, pending,
+    rate: total>0?(collected/total)*100:0,
+    weight,
+    co2,
+    water: weight*150,
+    landfill: weight*0.85,
+    trees: Math.round(co2/21),
   };
 }
 
-function calculateCategoryStats(items: any[]): CategoryStats[] {
-  const categories: Record<string, { count: number; weight: number }> = {};
-  const total = items.reduce((sum, i) => sum + (i.quantity || 1), 0);
-
-  items.forEach(item => {
-    const cat = item.material_category || 'other';
-    if (!categories[cat]) categories[cat] = { count: 0, weight: 0 };
-    categories[cat].count += item.quantity || 1;
-    categories[cat].weight += (item.estimated_weight_kg || 0) * (item.quantity || 1);
+interface CatStat { name:string; label:string; count:number; weight:number; pct:number; }
+function calcCategories(items: any[]): CatStat[] {
+  const m: Record<string,{count:number;weight:number}> = {};
+  const tot = items.reduce((s,i)=>s+(i.quantity||1),0);
+  items.forEach(i=>{
+    const k = i.material_category||'other';
+    if(!m[k]) m[k]={count:0,weight:0};
+    m[k].count += i.quantity||1;
+    m[k].weight += (i.estimated_weight_kg||0)*(i.quantity||1);
   });
-
-  return Object.entries(categories)
-    .map(([name, data]) => ({
-      name,
-      label: CATEGORY_LABELS_EN[name] || name,
-      count: data.count,
-      weight: data.weight,
-      percentage: total > 0 ? (data.count / total) * 100 : 0,
-    }))
-    .sort((a, b) => b.count - a.count);
+  return Object.entries(m)
+    .map(([name,d])=>({name,label:CATEGORY_EN[name]||name,count:d.count,weight:d.weight,pct:tot>0?(d.count/tot)*100:0}))
+    .sort((a,b)=>b.count-a.count);
 }
 
-function calculateCollectorStats(
-  items: any[]
-): { name: string; count: number; percentage: number }[] {
-  const collectors: Record<string, number> = {};
-  const collectedItems = items.filter(i => i.collected);
-  const total = collectedItems.reduce((sum, i) => sum + (i.quantity || 1), 0);
-
-  collectedItems.forEach(item => {
-    const collector = (item as any).collected_by || 'Unassigned';
-    collectors[collector] = (collectors[collector] || 0) + (item.quantity || 1);
+function calcCollectors(items: any[]): {name:string;count:number;pct:number}[] {
+  const done = items.filter(i=>i.collected);
+  const tot  = done.reduce((s,i)=>s+(i.quantity||1),0);
+  const m: Record<string,number> = {};
+  done.forEach(i=>{
+    const n = i.collected_by||'Unassigned';
+    m[n] = (m[n]||0)+(i.quantity||1);
   });
-
-  return Object.entries(collectors)
-    .map(([name, count]) => ({
-      name,
-      count,
-      percentage: total > 0 ? (count / total) * 100 : 0,
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
+  return Object.entries(m)
+    .map(([name,count])=>({name,count,pct:tot>0?(count/tot)*100:0}))
+    .sort((a,b)=>b.count-a.count).slice(0,8);
 }
 
-function generateInsights(
-  stats: any,
-  categories: CategoryStats[],
-  collectors: any[]
-): string[] {
-  const insights: string[] = [];
-
-  if (stats.collectionRate >= 95) {
-    insights.push(
-      `Excellent collection efficiency: ${stats.collectionRate.toFixed(1)}% of items successfully recovered`
-    );
-  } else if (stats.collectionRate >= 80) {
-    insights.push(
-      `Good collection efficiency: ${stats.collectionRate.toFixed(1)}% of items collected`
-    );
-  } else {
-    insights.push(
-      `Collection rate: ${stats.collectionRate.toFixed(1)}% — room for improvement`
-    );
-  }
-
-  if (categories.length > 0) {
-    const top = categories[0];
-    insights.push(
-      `Leading category: ${top.label} accounts for ${top.percentage.toFixed(1)}% of all materials`
-    );
-  }
-
-  if (collectors.length > 0 && collectors[0].name !== 'Unassigned') {
-    insights.push(`Top collector: ${collectors[0].name} (${collectors[0].count} items)`);
-  }
-
-  if (stats.treesEquivalent > 0) {
-    insights.push(
-      `Environmental impact equivalent to planting ${stats.treesEquivalent} trees`
-    );
-  }
-
-  if (stats.landfillAvoided > 0) {
-    insights.push(
-      `Landfill diversion: ${stats.landfillAvoided.toFixed(1)} kg of waste avoided`
-    );
-  }
-
-  return insights;
+function buildInsights(s: ReturnType<typeof calcStats>, cats: CatStat[], cols: any[]): string[] {
+  const out: string[] = [];
+  if (s.rate>=95) out.push(`Outstanding collection efficiency: ${s.rate.toFixed(1)}% of all items successfully recovered.`);
+  else if (s.rate>=80) out.push(`Strong collection efficiency: ${s.rate.toFixed(1)}% of items collected — on track to meet targets.`);
+  else out.push(`Collection rate stands at ${s.rate.toFixed(1)}% — a structured review of blockers is recommended.`);
+  if (cats[0]) out.push(`${cats[0].label} is the dominant material class at ${cats[0].pct.toFixed(1)}% of total inventory.`);
+  if (cols[0]&&cols[0].name!=='Unassigned') out.push(`Top performer: ${cols[0].name} collected ${cols[0].count} items (${cols[0].pct.toFixed(0)}% of all recovered units).`);
+  if (s.trees>0) out.push(`CO₂ savings equivalent to planting ${s.trees} trees — measurable climate contribution.`);
+  if (s.pending>0) out.push(`${s.pending} items remain pending collection and represent immediate recovery opportunity.`);
+  return out;
 }
 
-function pageHeader(
-  doc: jsPDF,
-  title: string,
-  color: [number, number, number] = [30, 58, 95]
-) {
+// ─── Layout helpers ────────────────────────────────────────────────────────────
+function hex2rgb(h: string): [number,number,number] {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);
+  return r ? [parseInt(r[1],16),parseInt(r[2],16),parseInt(r[3],16)] : [0,0,0];
+}
+
+function sectionHeader(doc: jsPDF, title: string, W: number) {
+  doc.setFillColor(...C.navy);
+  doc.rect(0,0,W,16,'F');
+  // Left accent bar
+  doc.setFillColor(...C.green);
+  doc.rect(0,0,4,16,'F');
+  doc.setTextColor(...C.white);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.text(title, W/2, 11, {align:'center'});
+}
+
+function addFooter(doc: jsPDF, page: number, total: number, project: string, W: number, H: number) {
+  doc.setFillColor(...C.navy);
+  doc.rect(0, H-9, W, 9, 'F');
+  doc.setTextColor(...C.white);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(6.5);
+  doc.text(project, 10, H-3.5);
+  doc.text('CONFIDENTIAL', W/2, H-3.5, {align:'center'});
+  doc.text(`Page ${page} of ${total}`, W-10, H-3.5, {align:'right'});
+}
+
+function kpiCard(doc: jsPDF, x: number, y: number, w: number, h: number,
+  value: string, label: string, accent: [number,number,number]) {
+  doc.setFillColor(...C.white);
+  doc.roundedRect(x,y,w,h,3,3,'F');
+  doc.setDrawColor(...accent);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(x,y,w,h,3,3,'S');
+  // Top color stripe
+  doc.setFillColor(...accent);
+  doc.rect(x,y,w,3,'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(15);
+  doc.setTextColor(...C.ink);
+  doc.text(value, x+w/2, y+15, {align:'center'});
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...C.muted);
+  doc.text(label, x+w/2, y+22, {align:'center'});
+}
+
+function insightBox(doc: jsPDF, x: number, y: number, w: number, text: string, color: [number,number,number]) {
+  const lines = doc.splitTextToSize(text, w-18) as string[];
+  const bh = lines.length*5.5+8;
+  doc.setFillColor(color[0],color[1],color[2],0.08 as any);
+  doc.setFillColor(Math.min(color[0]+180,255),Math.min(color[1]+180,255),Math.min(color[2]+180,255));
+  doc.roundedRect(x,y,w,bh,2,2,'F');
   doc.setFillColor(...color);
-  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 16, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text(title, doc.internal.pageSize.getWidth() / 2, 11, { align: 'center' });
+  doc.rect(x,y,3,bh,'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(...color);
+  doc.text('▸', x+6, y+6);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(...C.ink);
+  doc.text(lines, x+12, y+6);
+  return bh+3;
 }
 
-function renderCoverPage(
+// ─── Donut chart ───────────────────────────────────────────────────────────────
+function drawDonut(
   doc: jsPDF,
-  data: ReportData,
-  pageWidth: number,
-  pageHeight: number
+  cx: number, cy: number,
+  outerR: number, innerR: number,
+  segs: {value:number;color:string}[]
 ) {
-  // Full-page dark background
-  doc.setFillColor(30, 58, 95);
-  doc.rect(0, 0, pageWidth, pageHeight, 'F');
-
-  // Accent stripe
-  doc.setFillColor(16, 185, 129);
-  doc.rect(0, pageHeight / 2 - 70, 6, 140, 'F');
-
-  // White content card
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(20, pageHeight / 2 - 65, pageWidth - 40, 130, 6, 6, 'F');
-
-  // Title
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(26);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Selective Deconstruction Report', pageWidth / 2, pageHeight / 2 - 32, {
-    align: 'center',
+  const tot = segs.reduce((s,d)=>s+d.value,0);
+  if (!tot) return;
+  let angle = -Math.PI/2;
+  segs.forEach(seg=>{
+    if (seg.value<=0) return;
+    const sweep = (seg.value/tot)*Math.PI*2;
+    const steps = Math.max(4, Math.ceil(sweep*20));
+    const rgb = hex2rgb(seg.color);
+    doc.setFillColor(...rgb);
+    // Build donut ring polygon: outer arc forward, inner arc backward
+    const pts: [number,number][] = [];
+    for(let i=0;i<=steps;i++){
+      const a = angle+(sweep*i)/steps;
+      pts.push([cx+outerR*Math.cos(a), cy+outerR*Math.sin(a)]);
+    }
+    for(let i=steps;i>=0;i--){
+      const a = angle+(sweep*i)/steps;
+      pts.push([cx+innerR*Math.cos(a), cy+innerR*Math.sin(a)]);
+    }
+    const deltas = pts.slice(1).map((p,i)=>[p[0]-pts[i][0], p[1]-pts[i][1]]);
+    doc.lines(deltas, pts[0][0], pts[0][1], [1,1], 'F', true);
+    angle += sweep;
   });
+  // White center hole
+  doc.setFillColor(...C.white);
+  doc.circle(cx, cy, innerR, 'F');
+}
+
+// ─── Horizontal progress bar ───────────────────────────────────────────────────
+function progressBar(doc: jsPDF, x: number, y: number, w: number, h: number,
+  pct: number, color: [number,number,number]) {
+  doc.setFillColor(...C.slate);
+  doc.roundedRect(x,y,w,h,h/2,h/2,'F');
+  if (pct>0) {
+    doc.setFillColor(...color);
+    doc.roundedRect(x,y,Math.max(w*pct/100,h),h,h/2,h/2,'F');
+  }
+}
+
+// ─── Pages ─────────────────────────────────────────────────────────────────────
+
+function pageCover(doc: jsPDF, data: ReportData, W: number, H: number, s: ReturnType<typeof calcStats>) {
+  // Background
+  doc.setFillColor(...C.navy);
+  doc.rect(0,0,W,H,'F');
+  // Bold left accent stripe
+  doc.setFillColor(...C.green);
+  doc.rect(0,0,8,H,'F');
+  // Top-right decorative block
+  doc.setFillColor(59,130,246,0.3 as any);
+  doc.setFillColor(40,80,130);
+  doc.rect(W-50,0,50,50,'F');
+  doc.setFillColor(30,58,95);
+  doc.rect(W-40,10,30,30,'F');
+
+  // White content panel
+  const panelY = H*0.28;
+  const panelH = H*0.38;
+  doc.setFillColor(...C.white);
+  doc.roundedRect(18, panelY, W-36, panelH, 6,6,'F');
+
+  // Eyebrow
+  doc.setTextColor(...C.green);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.text('SELECTIVE DECONSTRUCTION', W/2, panelY+12, {align:'center'});
+
+  // Main title
+  doc.setTextColor(...C.navy);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(22);
+  doc.text('Executive Report', W/2, panelY+26, {align:'center'});
 
   // Divider
-  doc.setDrawColor(16, 185, 129);
-  doc.setLineWidth(1);
-  doc.line(pageWidth / 2 - 40, pageHeight / 2 - 20, pageWidth / 2 + 40, pageHeight / 2 - 20);
+  doc.setDrawColor(...C.green);
+  doc.setLineWidth(1.5);
+  doc.line(W/2-35, panelY+31, W/2+35, panelY+31);
 
   // Project name
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(31, 41, 55);
-  doc.text(data.projectName || 'Project', pageWidth / 2, pageHeight / 2 - 5, {
-    align: 'center',
-  });
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(14);
+  doc.setTextColor(...C.ink);
+  const nameLines = doc.splitTextToSize(data.projectName||'Project', W-80) as string[];
+  doc.text(nameLines, W/2, panelY+42, {align:'center'});
 
   // Address
   if (data.projectAddress) {
-    doc.setFontSize(12);
-    doc.setTextColor(107, 114, 128);
-    doc.text(data.projectAddress, pageWidth / 2, pageHeight / 2 + 12, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setTextColor(...C.muted);
+    doc.text(data.projectAddress, W/2, panelY+54, {align:'center'});
   }
 
   // Date
-  doc.setFontSize(11);
-  doc.setTextColor(107, 114, 128);
-  const dateStr = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  doc.setFontSize(9);
+  doc.setTextColor(...C.muted);
+  doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),
+    W/2, panelY+panelH-10, {align:'center'});
+
+  // KPI preview strip at bottom
+  const stripY = H*0.75;
+  const stripH = H*0.13;
+  doc.setFillColor(20,45,78);
+  doc.rect(0, stripY, W, stripH,'F');
+
+  const kpis = [
+    {v: s.total.toLocaleString(),       l:'Total Items'},
+    {v: `${s.rate.toFixed(1)}%`,        l:'Collection Rate'},
+    {v: `${s.weight.toFixed(0)} kg`,    l:'Total Weight'},
+    {v: `${s.co2.toFixed(0)} kg CO₂`,  l:'Carbon Saved'},
+  ];
+  const kw = W/kpis.length;
+  kpis.forEach((k,i)=>{
+    const kx = i*kw + kw/2;
+    if (i>0) {
+      doc.setDrawColor(255,255,255,0.2 as any);
+      doc.setDrawColor(60,90,130);
+      doc.setLineWidth(0.3);
+      doc.line(i*kw, stripY+8, i*kw, stripY+stripH-8);
+    }
+    doc.setTextColor(...C.white);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(16);
+    doc.text(k.v, kx, stripY+stripH*0.42, {align:'center'});
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.muted);
+    doc.text(k.l, kx, stripY+stripH*0.68, {align:'center'});
   });
-  doc.text(dateStr, pageWidth / 2, pageHeight / 2 + 32, { align: 'center' });
 
   // Footer
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(9);
-  doc.text('CONFIDENTIAL — Selective Deconstruction Platform', pageWidth / 2, pageHeight - 18, {
-    align: 'center',
-  });
+  doc.setTextColor(80,110,150);
+  doc.setFontSize(7);
+  doc.text('CONFIDENTIAL — FOR AUTHORIZED RECIPIENTS ONLY', W/2, H-6, {align:'center'});
 }
 
-function renderExecutiveSummary(
-  doc: jsPDF,
-  stats: any,
-  insights: string[],
-  margin: number,
-  contentWidth: number
-) {
-  pageHeader(doc, 'Executive Summary');
-  let y = 28;
+// ─── Page 2: Executive Summary ─────────────────────────────────────────────────
+function pageExecSummary(doc: jsPDF, s: ReturnType<typeof calcStats>, tips: string[], M: number, CW: number) {
+  let y = 26;
 
-  // Section title
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Key Performance Indicators', margin, y);
-  y += 10;
+  // Section label
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...C.navy);
+  doc.text('Key Performance Indicators', M, y);
+  y += 7;
 
-  // 6 KPI cards in 2 rows of 3
-  const kpiWidth = (contentWidth - 10) / 3;
-  const kpiHeight = 26;
+  // 6 KPI cards (2 rows × 3)
   const kpis = [
-    { label: 'Total Items', value: stats.totalItems.toLocaleString() },
-    { label: 'Collection Rate', value: `${stats.collectionRate.toFixed(1)}%` },
-    { label: 'Total Weight', value: `${stats.totalWeight.toFixed(1)} kg` },
-    { label: 'CO2 Saved', value: `${stats.co2Saved.toFixed(1)} kg` },
-    { label: 'Water Saved', value: `${(stats.waterSaved / 1000).toFixed(1)} m3` },
-    { label: 'Trees Equivalent', value: `${stats.treesEquivalent}` },
+    {v:s.total.toLocaleString(),             l:'Total Items',        c:C.blue},
+    {v:`${s.rate.toFixed(1)}%`,              l:'Collection Rate',    c:C.green},
+    {v:`${s.collected.toLocaleString()}`,    l:'Items Collected',    c:C.green},
+    {v:`${s.pending.toLocaleString()}`,      l:'Items Pending',      c:C.amber},
+    {v:`${s.weight.toFixed(1)} kg`,          l:'Total Weight',       c:C.blue},
+    {v:`${s.trees}`,                         l:'Trees Equivalent',   c:C.green},
   ];
+  const cw = (CW-8)/3;
+  const ch = 28;
+  kpis.forEach((k,i)=>{
+    const row = Math.floor(i/3), col = i%3;
+    kpiCard(doc, M+col*(cw+4), y+row*(ch+4), cw, ch, k.v, k.l, k.c);
+  });
+  y += 2*(ch+4)+6;
 
-  kpis.forEach((kpi, index) => {
-    const row = Math.floor(index / 3);
-    const col = index % 3;
-    const x = margin + col * (kpiWidth + 5);
-    const cardY = y + row * (kpiHeight + 5);
+  // Key Insights
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...C.navy);
+  doc.text('Key Insights', M, y);
+  y += 5;
 
-    doc.setFillColor(249, 250, 251);
-    doc.roundedRect(x, cardY, kpiWidth, kpiHeight, 2, 2, 'F');
-    doc.setDrawColor(229, 231, 235);
-    doc.roundedRect(x, cardY, kpiWidth, kpiHeight, 2, 2, 'S');
-
-    doc.setTextColor(31, 41, 55);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(kpi.value, x + kpiWidth / 2, cardY + 10, { align: 'center' });
-
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text(kpi.label, x + kpiWidth / 2, cardY + 19, { align: 'center' });
+  const insightColors: [number,number,number][] = [C.green, C.blue, C.amber, C.navy, C.green];
+  tips.forEach((tip,i)=>{
+    y += insightBox(doc, M, y, CW, tip, insightColors[i%insightColors.length]);
   });
 
-  y += 67;
+  y += 4;
 
-  // Key insights
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Key Insights', margin, y);
-  y += 8;
+  // Summary assessment box
+  const summaryText = s.rate>=80
+    ? 'This project demonstrates strong selective deconstruction performance. High recovery rates, measurable environmental benefits, and clear team accountability position this engagement as a benchmark for future projects.'
+    : 'The project shows meaningful progress but has headroom for improvement. A focused review of pending items and collector attribution completeness will drive recovery rates toward target thresholds.';
 
-  doc.setTextColor(31, 41, 55);
+  doc.setFillColor(239,246,255);
+  doc.roundedRect(M, y, CW, 32, 4,4,'F');
+  doc.setFillColor(...C.blue);
+  doc.rect(M, y, 3, 32,'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...C.blue);
+  doc.text('Assessment', M+8, y+8);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...C.ink);
+  const sl = doc.splitTextToSize(summaryText, CW-16) as string[];
+  doc.text(sl, M+8, y+16);
+}
+
+// ─── Page 3: Material Breakdown ───────────────────────────────────────────────
+function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
+  let y = 26;
+  doc.setFont('helvetica','bold');
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...C.navy);
+  doc.text('Material Distribution', M, y);
+  y += 7;
 
-  insights.forEach(insight => {
-    doc.setFillColor(16, 185, 129);
-    doc.circle(margin + 3, y + 2, 1.5, 'F');
-    const lines = doc.splitTextToSize(insight, contentWidth - 14) as string[];
-    doc.text(lines, margin + 10, y + 4);
-    y += lines.length * 6 + 4;
+  if (cats.length === 0) {
+    doc.setTextColor(...C.muted);
+    doc.setFontSize(10);
+    doc.text('No material data available.', M+CW/2, y+20, {align:'center'});
+    return;
+  }
+
+  // ── Donut chart (left half) ──
+  const donutCX = M + 38;
+  const donutCY = y + 44;
+  const outerR = 34;
+  const innerR = 20;
+
+  drawDonut(doc, donutCX, donutCY, outerR, innerR,
+    cats.map((c,i)=>({value:c.count, color:PALETTE[i%PALETTE.length]})));
+
+  // Center label
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...C.ink);
+  doc.text(cats.reduce((s,c)=>s+c.count,0).toString(), donutCX, donutCY-2, {align:'center'});
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(...C.muted);
+  doc.text('items', donutCX, donutCY+5, {align:'center'});
+
+  // ── Legend (right of donut) ──
+  const legendX = M + 82;
+  const top6 = cats.slice(0,6);
+  top6.forEach((c,i)=>{
+    const ly = y + 6 + i*14;
+    const rgb = hex2rgb(PALETTE[i%PALETTE.length]);
+    doc.setFillColor(...rgb);
+    doc.roundedRect(legendX, ly, 7, 7, 1,1,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...C.ink);
+    doc.text(c.label, legendX+10, ly+5.5);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.muted);
+    doc.text(`${c.count} items · ${c.pct.toFixed(1)}%`, legendX+10, ly+12);
+  });
+
+  y += 100;
+
+  // ── Bar chart ──
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...C.navy);
+  doc.text('Count by Category', M, y);
+  y += 6;
+
+  const maxCnt = Math.max(...cats.map(c=>c.count),1);
+  const barsW = CW-30;
+  const barH = 9;
+  cats.slice(0,8).forEach((c,i)=>{
+    const by = y + i*(barH+5);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.ink);
+    doc.text(c.label, M, by+barH-1);
+    const rgb = hex2rgb(PALETTE[i%PALETTE.length]);
+    doc.setFillColor(...C.slate);
+    doc.roundedRect(M+22, by, barsW, barH, 2,2,'F');
+    doc.setFillColor(...rgb);
+    doc.roundedRect(M+22, by, Math.max(barsW*c.count/maxCnt,3), barH, 2,2,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...C.ink);
+    doc.text(c.count.toString(), M+22+barsW+3, by+barH-1);
+  });
+
+  y += cats.slice(0,8).length*(barH+5)+8;
+
+  // ── Full table ──
+  autoTable(doc,{
+    startY: y,
+    head: [['Category','Items','Share','Weight (kg)','CO₂ Factor']],
+    body: cats.map((c,i)=>[
+      c.label, c.count, `${c.pct.toFixed(1)}%`, c.weight.toFixed(1),
+      `${(CO2[c.name]||1).toFixed(1)} kg/kg`,
+    ]),
+    theme:'striped',
+    headStyles:{fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:8},
+    bodyStyles:{fontSize:8},
+    columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},
+    margin:{left:M,right:M},
+  });
+
+  const tY = (doc as any).lastAutoTable.finalY+4;
+  if (cats[0]) {
+    insightBox(doc, M, tY, CW,
+      `${cats[0].label} represents the largest recoverable category at ${cats[0].pct.toFixed(1)}% of inventory — prioritising this stream maximises diversion impact.`,
+      C.green);
+  }
+}
+
+// ─── Page 4: Collection Performance ───────────────────────────────────────────
+function pageCollection(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number, CW: number) {
+  let y = 26;
+
+  // Big rate hero card
+  doc.setFillColor(240,253,244);
+  doc.roundedRect(M, y, CW, 44, 5,5,'F');
+  doc.setFillColor(...C.green);
+  doc.rect(M, y, 4, 44,'F');
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(36);
+  doc.setTextColor(...C.green);
+  const cx = M+CW/2;
+  doc.text(`${s.rate.toFixed(1)}%`, cx, y+26, {align:'center'});
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.setTextColor(...C.ink);
+  doc.text('Collection Rate', cx, y+38, {align:'center'});
+
+  y += 55;
+
+  // Status bars
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...C.navy);
+  doc.text('Status Breakdown', M, y);
+  y += 7;
+
+  const rows = [
+    {label:'Collected', value:s.collected, color:C.green,  pct:s.total>0?(s.collected/s.total)*100:0},
+    {label:'Pending',   value:s.pending,   color:C.amber,  pct:s.total>0?(s.pending/s.total)*100:0},
+    {label:'Other',     value:Math.max(0,s.total-s.collected-s.pending), color:C.muted,
+      pct: s.total>0?Math.max(0,(s.total-s.collected-s.pending)/s.total)*100:0},
+  ];
+
+  rows.forEach(r=>{
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.ink);
+    doc.text(r.label, M, y+8);
+    progressBar(doc, M+32, y+2, CW-70, 10, r.pct, r.color);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...C.muted);
+    doc.text(`${r.value} (${r.pct.toFixed(1)}%)`, M+CW-3, y+9, {align:'right'});
+    y += 18;
   });
 
   y += 6;
 
-  // Summary box
-  doc.setFillColor(239, 246, 255);
-  doc.roundedRect(margin, y, contentWidth, 28, 3, 3, 'F');
-
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Summary', margin + 5, y + 8);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  const summaryText =
-    stats.collectionRate >= 80
-      ? 'This project demonstrates high selective deconstruction efficiency with strong recovery rates and measurable environmental impact.'
-      : 'The project shows potential for improvement in collection rates. A process review is recommended to identify and address bottlenecks.';
-  const summaryLines = doc.splitTextToSize(summaryText, contentWidth - 12) as string[];
-  doc.text(summaryLines, margin + 5, y + 17);
-}
-
-function renderMaterialBreakdown(
-  doc: jsPDF,
-  categories: CategoryStats[],
-  margin: number,
-  contentWidth: number
-) {
-  pageHeader(doc, 'Material Breakdown');
-  let y = 28;
-
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Distribution by Category', margin, y);
-  y += 12;
-
-  // Bar chart
-  const chartHeight = 80;
-  const barWidth = (contentWidth - 20) / Math.min(categories.length, 8);
-  const maxCount = Math.max(...categories.map(c => c.count), 1);
-
-  categories.slice(0, 8).forEach((cat, index) => {
-    const x = margin + 10 + index * barWidth;
-    const barHeight = (cat.count / maxCount) * chartHeight;
-    const barY = y + chartHeight - barHeight;
-
-    const palette = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
-    const rgb = hexToRgb(palette[index % palette.length]);
-    doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    doc.roundedRect(x + 2, barY, barWidth - 4, barHeight, 2, 2, 'F');
-
-    // Count above bar
-    doc.setTextColor(31, 41, 55);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text(cat.count.toString(), x + barWidth / 2, barY - 3, { align: 'center' });
-
-    // Label below
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    const labelLines = doc.splitTextToSize(cat.label, barWidth - 4) as string[];
-    doc.text(labelLines[0], x + barWidth / 2, y + chartHeight + 7, { align: 'center' });
-  });
-
-  y += chartHeight + 22;
-
-  // Table
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Full Breakdown', margin, y);
-  y += 5;
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Category', 'Count', 'Share', 'Weight (kg)']],
-    body: categories.map(cat => [
-      cat.label,
-      cat.count.toString(),
-      `${cat.percentage.toFixed(1)}%`,
-      cat.weight.toFixed(1),
-    ]),
-    theme: 'striped',
-    headStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
-    margin: { left: margin, right: margin },
-  });
-
-  const tableEndY = (doc as any).lastAutoTable.finalY + 10;
-  const topCat = categories[0];
-  if (topCat) {
-    doc.setFillColor(240, 253, 244);
-    doc.roundedRect(margin, tableEndY, contentWidth, 18, 3, 3, 'F');
-    doc.setTextColor(16, 185, 129);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Insight:', margin + 5, tableEndY + 7);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(31, 41, 55);
-    doc.text(
-      `Most recoverable materials come from ${topCat.label} (${topCat.percentage.toFixed(1)}% of total)`,
-      margin + 25,
-      tableEndY + 7
-    );
-  }
-}
-
-function renderCollectionPerformance(
-  doc: jsPDF,
-  stats: any,
-  margin: number,
-  contentWidth: number
-) {
-  pageHeader(doc, 'Collection Performance');
-  let y = 35;
-
-  // Big rate card
-  doc.setFillColor(240, 253, 244);
-  doc.roundedRect(margin, y, contentWidth, 48, 5, 5, 'F');
-
-  doc.setTextColor(16, 185, 129);
-  doc.setFontSize(34);
-  doc.setFont('helvetica', 'bold');
-  doc.text(
-    `${stats.collectionRate.toFixed(1)}%`,
-    doc.internal.pageSize.getWidth() / 2,
-    y + 24,
-    { align: 'center' }
-  );
-
-  doc.setTextColor(31, 41, 55);
-  doc.setFontSize(13);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Collection Rate', doc.internal.pageSize.getWidth() / 2, y + 38, { align: 'center' });
-
-  y += 62;
-
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Status Breakdown', margin, y);
-  y += 12;
-
-  const statuses = [
-    {
-      label: 'Collected',
-      value: stats.collectedItems,
-      color: '#10B981',
-      pct: (stats.collectedItems / Math.max(stats.totalItems, 1)) * 100,
-    },
-    {
-      label: 'Pending',
-      value: stats.notCollectedItems,
-      color: '#F59E0B',
-      pct: (stats.notCollectedItems / Math.max(stats.totalItems, 1)) * 100,
-    },
+  // 4 mini-KPI row
+  const mw = (CW-12)/4;
+  const mh = 24;
+  const mkpis = [
+    {v:s.total.toString(), l:'Total Inventoried',  c:C.blue},
+    {v:s.collected.toString(), l:'Recovered',       c:C.green},
+    {v:s.pending.toString(), l:'Outstanding',       c:C.amber},
+    {v:`${s.weight.toFixed(0)} kg`, l:'Total Mass', c:C.navy},
   ];
+  mkpis.forEach((k,i)=>kpiCard(doc, M+i*(mw+4), y, mw, mh, k.v, k.l, k.c));
+  y += mh+8;
 
-  statuses.forEach((s, i) => {
-    const rowY = y + i * 30;
-
-    doc.setTextColor(31, 41, 55);
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text(s.label, margin, rowY + 5);
-
-    const barW = contentWidth - 80;
-    doc.setFillColor(229, 231, 235);
-    doc.roundedRect(margin + 40, rowY, barW, 10, 2, 2, 'F');
-
-    const rgb = hexToRgb(s.color);
-    doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    const fill = Math.max((barW * s.pct) / 100, s.pct > 0 ? 4 : 0);
-    doc.roundedRect(margin + 40, rowY, fill, 10, 2, 2, 'F');
-
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.text(
-      `${s.value} (${s.pct.toFixed(1)}%)`,
-      contentWidth + margin - 5,
-      rowY + 7,
-      { align: 'right' }
-    );
-  });
-
-  y += 75;
-
-  doc.setFillColor(239, 246, 255);
-  doc.roundedRect(margin, y, contentWidth, 22, 3, 3, 'F');
-  doc.setTextColor(59, 130, 246);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Insight:', margin + 5, y + 9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(31, 41, 55);
-  const perf =
-    stats.collectionRate >= 90 ? 'High collection efficiency with minimal losses.' : 'Opportunity to improve collection efficiency.';
-  doc.text(perf, margin + 30, y + 9);
+  const perfNote = s.rate>=90
+    ? 'Exceptional recovery performance. The project is on track to exceed standard diversion benchmarks.'
+    : s.rate>=75
+    ? 'Good progress toward collection targets. A targeted push on pending items will close the gap.'
+    : 'Collection rate below optimal threshold. Recommend immediate review of access, scheduling, and team capacity.';
+  insightBox(doc, M, y, CW, perfNote, s.rate>=75?C.green:C.amber);
 }
 
-function renderTeamPerformance(
-  doc: jsPDF,
-  collectors: any[],
-  stats: any,
-  margin: number,
-  contentWidth: number
-) {
-  pageHeader(doc, 'Team Performance');
-  let y = 35;
+// ─── Page 5: Team Performance ─────────────────────────────────────────────────
+function pageTeam(doc: jsPDF, cols: {name:string;count:number;pct:number}[], s: ReturnType<typeof calcStats>, M: number, CW: number) {
+  let y = 26;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...C.navy);
+  doc.text('Collector Leaderboard', M, y);
+  y += 7;
 
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Collector Leaderboard', margin, y);
-  y += 12;
-
-  if (collectors.length === 0 || (collectors.length === 1 && collectors[0].name === 'Unassigned')) {
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(
-      'No collector data available yet.',
-      doc.internal.pageSize.getWidth() / 2,
-      y + 20,
-      { align: 'center' }
-    );
+  const named = cols.filter(c=>c.name!=='Unassigned');
+  if (named.length===0) {
+    doc.setTextColor(...C.muted);
+    doc.setFontSize(10);
+    doc.text('No collector attribution data available.', M+CW/2, y+20, {align:'center'});
     return;
   }
 
-  const maxCount = collectors[0]?.count || 1;
-  const badgeColors = ['#F59E0B', '#9CA3AF', '#CD7F32', '#6B7280', '#6B7280'];
-
-  collectors.slice(0, 5).forEach((collector, index) => {
-    const rowY = y + index * 26;
-    const rgb = hexToRgb(badgeColors[index]);
-    doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    doc.circle(margin + 8, rowY + 8, 8, 'F');
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text((index + 1).toString(), margin + 8, rowY + 11, { align: 'center' });
-
-    doc.setTextColor(31, 41, 55);
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(collector.name, margin + 22, rowY + 10);
-
-    const barW = contentWidth - 100;
-    doc.setFillColor(229, 231, 235);
-    doc.roundedRect(margin + 70, rowY + 3, barW, 10, 2, 2, 'F');
-
-    doc.setFillColor(59, 130, 246);
-    const fill = (barW * collector.count) / maxCount;
-    doc.roundedRect(margin + 70, rowY + 3, fill, 10, 2, 2, 'F');
-
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(10);
-    doc.text(
-      `${collector.count} items`,
-      contentWidth + margin - 5,
-      rowY + 10,
-      { align: 'right' }
-    );
+  const maxC = named[0].count||1;
+  const medals = [...C.amber, C.muted, [205,127,50] as [number,number,number]];
+  named.slice(0,7).forEach((c,i)=>{
+    const ry = y + i*25;
+    // Rank circle
+    const rgb = i<3 ? hex2rgb(['#F59E0B','#9CA3AF','#CD7F32'][i]) : C.muted;
+    doc.setFillColor(...rgb);
+    doc.circle(M+7, ry+8, 7,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.white);
+    doc.text((i+1).toString(), M+7, ry+11, {align:'center'});
+    // Name
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...C.ink);
+    const nameStr = c.name.length>22 ? c.name.slice(0,21)+'…' : c.name;
+    doc.text(nameStr, M+18, ry+9);
+    // Bar
+    const barW = CW-70;
+    doc.setFillColor(...C.slate);
+    doc.roundedRect(M+18, ry+12, barW, 8, 2,2,'F');
+    doc.setFillColor(...C.blue);
+    doc.roundedRect(M+18, ry+12, Math.max(barW*c.count/maxC,3), 8, 2,2,'F');
+    // Count
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...C.muted);
+    doc.text(`${c.count} items · ${c.pct.toFixed(0)}%`, M+CW-2, ry+9, {align:'right'});
   });
 
-  y += collectors.slice(0, 5).length * 26 + 20;
+  y += named.slice(0,7).length*25+8;
 
-  if (collectors.length >= 2) {
-    const top2Pct =
-      ((collectors[0].count + (collectors[1]?.count || 0)) /
-        Math.max(stats.collectedItems, 1)) *
-      100;
-    doc.setFillColor(254, 243, 199);
-    doc.roundedRect(margin, y, contentWidth, 22, 3, 3, 'F');
-    doc.setTextColor(217, 119, 6);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Insight:', margin + 5, y + 9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(31, 41, 55);
-    doc.text(
-      `Top 2 collectors account for ${top2Pct.toFixed(0)}% of all items collected`,
-      margin + 28,
-      y + 9
-    );
+  if (named.length>=2) {
+    const top2pct = ((named[0].count+(named[1]?.count||0))/Math.max(s.collected,1)*100);
+    insightBox(doc, M, y, CW,
+      `Top 2 collectors account for ${top2pct.toFixed(0)}% of all recovered items — consider cross-training to distribute load and reduce key-person risk.`,
+      C.amber);
+    y += 24;
+  }
+
+  if (cols.some(c=>c.name==='Unassigned')) {
+    const u = cols.find(c=>c.name==='Unassigned')!;
+    insightBox(doc, M, y, CW,
+      `${u.count} items (${u.pct.toFixed(1)}%) have no collector attribution. Complete tagging improves traceability and accountability.`,
+      C.red);
   }
 }
 
-function renderEnvironmentalImpact(
-  doc: jsPDF,
-  stats: any,
-  margin: number,
-  contentWidth: number
-) {
-  pageHeader(doc, 'Environmental Impact', [16, 185, 129]);
-  let y = 35;
-
-  const impacts = [
-    {
-      label: 'CO2 Saved',
-      value: stats.co2Saved.toFixed(1),
-      unit: 'kg CO2',
-      note: `Equivalent to planting ${stats.treesEquivalent} trees`,
-    },
-    {
-      label: 'Water Saved',
-      value: (stats.waterSaved / 1000).toFixed(1),
-      unit: 'm3',
-      note: `~${Math.round(stats.waterSaved / 150)} showers avoided`,
-    },
-    {
-      label: 'Landfill Avoided',
-      value: stats.landfillAvoided.toFixed(1),
-      unit: 'kg',
-      note: `${((stats.landfillAvoided / Math.max(stats.totalWeight, 1)) * 100).toFixed(0)}% diversion rate`,
-    },
-  ];
-
-  const cardW = (contentWidth - 10) / 3;
-  const cardH = 68;
-
-  impacts.forEach((impact, index) => {
-    const x = margin + index * (cardW + 5);
-    doc.setFillColor(240, 253, 244);
-    doc.roundedRect(x, y, cardW, cardH, 5, 5, 'F');
-
-    doc.setTextColor(16, 185, 129);
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text(impact.value, x + cardW / 2, y + 24, { align: 'center' });
-
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(impact.unit, x + cardW / 2, y + 32, { align: 'center' });
-
-    doc.setTextColor(31, 41, 55);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text(impact.label, x + cardW / 2, y + 44, { align: 'center' });
-
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    const noteLines = doc.splitTextToSize(impact.note, cardW - 6) as string[];
-    doc.text(noteLines, x + cardW / 2, y + 54, { align: 'center' });
-  });
-
-  y += cardH + 22;
-
-  doc.setFillColor(236, 253, 245);
-  doc.roundedRect(margin, y, contentWidth, 30, 5, 5, 'F');
-  doc.setTextColor(16, 185, 129);
-  doc.setFontSize(13);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Environmental Summary', margin + 8, y + 11);
-
-  doc.setTextColor(31, 41, 55);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  const envText = doc.splitTextToSize(
-    'This project has delivered significant environmental benefits through a targeted reuse and recovery approach, diverting materials from landfill and reducing embodied carbon.',
-    contentWidth - 16
-  ) as string[];
-  doc.text(envText, margin + 8, y + 22);
-}
-
-function renderIssuesAndOpportunities(
-  doc: jsPDF,
-  items: any[],
-  margin: number,
-  contentWidth: number
-) {
-  pageHeader(doc, 'Issues & Opportunities', [245, 158, 11]);
-  let y = 35;
-
-  const notCollected = items.filter(i => i.intended_for_collection && !i.collected);
-  const missingCollector = items.filter(i => i.collected && !(i as any).collected_by);
-
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Issue Summary', margin, y);
-  y += 12;
-
-  const issues = [
-    { label: 'Items not yet collected', count: notCollected.length, color: '#EF4444' },
-    { label: 'Missing collector attribution', count: missingCollector.length, color: '#F59E0B' },
-  ];
-
-  issues.forEach((issue, index) => {
-    const rowY = y + index * 20;
-    const rgb = hexToRgb(issue.color);
-    doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    doc.circle(margin + 5, rowY + 3, 4, 'F');
-
-    doc.setTextColor(31, 41, 55);
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(issue.label, margin + 15, rowY + 5);
-
-    doc.setFont('helvetica', 'bold');
-    doc.text(issue.count.toString(), contentWidth + margin - 10, rowY + 5, { align: 'right' });
-  });
-
-  y += 52;
-
-  doc.setTextColor(30, 58, 95);
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Opportunities', margin, y);
-  y += 12;
-
-  const opportunities = [
-    'Improve real-time tracking of collector attribution',
-    'Set per-worker collection targets and track against them',
-    'Implement automated alerts for items not collected within SLA',
-    'Review high-pending apartments for access or process blockers',
-  ];
-
-  doc.setTextColor(31, 41, 55);
+// ─── Page 6: Environmental Impact ─────────────────────────────────────────────
+function pageEnvironment(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number, CW: number) {
+  let y = 26;
+  doc.setFont('helvetica','bold');
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  opportunities.forEach(opp => {
-    doc.setFillColor(59, 130, 246);
-    doc.circle(margin + 3, y + 2, 1.5, 'F');
-    doc.text(opp, margin + 10, y + 4);
-    y += 11;
+  doc.setTextColor(...C.navy);
+  doc.text('Environmental Impact Summary', M, y);
+  y += 7;
+
+  const cards = [
+    {icon:'🌿', value:`${s.co2.toFixed(1)}`, unit:'kg CO₂', label:'Carbon Saved', note:`≈ ${s.trees} trees planted`},
+    {icon:'💧', value:`${(s.water/1000).toFixed(1)}`, unit:'m³', label:'Water Conserved', note:`≈ ${Math.round(s.water/150).toLocaleString()} showers`},
+    {icon:'♻️', value:`${s.landfill.toFixed(1)}`, unit:'kg', label:'Landfill Diverted', note:`${((s.landfill/Math.max(s.weight,1))*100).toFixed(0)}% diversion rate`},
+  ];
+
+  const cw = (CW-10)/3;
+  const ch = 58;
+  cards.forEach((c,i)=>{
+    const cx2 = M+i*(cw+5);
+    doc.setFillColor(236,253,245);
+    doc.roundedRect(cx2, y, cw, ch, 5,5,'F');
+    doc.setFillColor(...C.green);
+    doc.rect(cx2, y, cw, 4,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...C.green);
+    doc.text(c.label.toUpperCase(), cx2+cw/2, y+12, {align:'center'});
+    doc.setFontSize(20);
+    doc.setTextColor(...C.green);
+    doc.text(c.value, cx2+cw/2, y+28, {align:'center'});
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...C.muted);
+    doc.text(c.unit, cx2+cw/2, y+36, {align:'center'});
+    doc.setFontSize(7);
+    doc.text(c.note, cx2+cw/2, y+48, {align:'center'});
   });
 
-  y += 10;
+  y += ch+10;
 
-  doc.setFillColor(239, 246, 255);
-  doc.roundedRect(margin, y, contentWidth, 28, 5, 5, 'F');
-  doc.setTextColor(59, 130, 246);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Recommendation:', margin + 6, y + 10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(31, 41, 55);
-  const recText = doc.splitTextToSize(
-    'Focus on increasing collection attribution completeness and implementing targeted follow-ups on pending items in select apartments to raise the overall recovery rate.',
-    contentWidth - 14
-  ) as string[];
-  doc.text(recText, margin + 6, y + 20);
+  // Donut — collected vs not (weight)
+  const collectedWeight = s.weight*(s.rate/100);
+  const pendingWeight   = s.weight - collectedWeight;
+  if (s.weight>0) {
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...C.navy);
+    doc.text('Weight Recovered vs Outstanding', M, y);
+    y += 5;
+
+    drawDonut(doc, M+30, y+30, 26, 15, [
+      {value:collectedWeight, color:'#10B981'},
+      {value:pendingWeight,   color:'#F59E0B'},
+    ]);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...C.ink);
+    doc.text(`${s.rate.toFixed(0)}%`, M+30, y+29, {align:'center'});
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...C.muted);
+    doc.text('recovered', M+30, y+35, {align:'center'});
+
+    // Legend
+    const lx = M+65;
+    [[C.green,'Recovered', collectedWeight.toFixed(1)],
+     [C.amber, 'Outstanding', pendingWeight.toFixed(1)]].forEach(([col,lbl,val]:any,i)=>{
+      const ly = y+10+i*16;
+      doc.setFillColor(...(col as [number,number,number]));
+      doc.roundedRect(lx, ly, 8, 8, 1,1,'F');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(9);
+      doc.setTextColor(...C.ink);
+      doc.text(lbl, lx+12, ly+6);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...C.muted);
+      doc.text(`${val} kg`, lx+12, ly+13);
+    });
+    y += 70;
+  }
+
+  insightBox(doc, M, y, CW,
+    'Selective deconstruction delivers compounding environmental returns: every kilogram recovered reduces embodied carbon, conserves water used in manufacturing, and keeps material value in the circular economy.',
+    C.green);
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) }
-    : { r: 0, g: 0, b: 0 };
+// ─── Page 7: Issues & Recommendations ─────────────────────────────────────────
+function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
+  let y = 26;
+
+  const uncollected   = items.filter(i=>i.intended_for_collection&&!i.collected);
+  const noAttribution = items.filter(i=>i.collected&&!i.collected_by);
+
+  // Issue summary table
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...C.navy);
+  doc.text('Issue Summary', M, y);
+  y += 5;
+
+  autoTable(doc,{
+    startY: y,
+    head: [['Issue','Count','Priority']],
+    body: [
+      ['Items not yet collected (flagged for collection)', uncollected.length, uncollected.length>10?'HIGH':'MEDIUM'],
+      ['Collected items with no attribution', noAttribution.length, noAttribution.length>5?'HIGH':'LOW'],
+    ],
+    theme:'grid',
+    headStyles:{fillColor:C.navy,textColor:C.white,fontStyle:'bold',fontSize:8},
+    bodyStyles:{fontSize:8.5},
+    columnStyles:{1:{halign:'right',cellWidth:22},2:{halign:'center',cellWidth:22}},
+    didParseCell:(d:any)=>{
+      if(d.column.index===2&&d.section==='body'){
+        const v = d.cell.raw as string;
+        d.cell.styles.textColor = v==='HIGH'?[239,68,68] : v==='MEDIUM'?[245,158,11] : [107,114,128];
+        d.cell.styles.fontStyle = 'bold';
+      }
+    },
+    margin:{left:M,right:M},
+  });
+
+  y = (doc as any).lastAutoTable.finalY+6;
+
+  // Top uncollected items
+  if (uncollected.length>0) {
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...C.navy);
+    doc.text(`Top Pending Items (showing ${Math.min(8,uncollected.length)} of ${uncollected.length})`, M, y);
+    y += 3;
+    autoTable(doc,{
+      startY: y,
+      head: [['Description','Qty','Category','Weight (kg)']],
+      body: uncollected.slice(0,8).map(i=>[
+        (i.description||'—').slice(0,38),
+        i.quantity||1,
+        CATEGORY_EN[i.material_category]||i.material_category||'—',
+        ((i.estimated_weight_kg||0)*(i.quantity||1)).toFixed(1),
+      ]),
+      theme:'striped',
+      headStyles:{fillColor:C.amber,textColor:C.white,fontStyle:'bold',fontSize:8},
+      bodyStyles:{fontSize:8},
+      columnStyles:{1:{halign:'right'},3:{halign:'right'}},
+      margin:{left:M,right:M},
+    });
+    y = (doc as any).lastAutoTable.finalY+6;
+  }
+
+  // Recommendations
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...C.navy);
+  doc.text('Strategic Recommendations', M, y);
+  y += 4;
+
+  const recs = [
+    {t:'Complete attribution tagging', d:'Ensure every collected item is linked to a named collector. This improves traceability and performance accountability.'},
+    {t:'Schedule sweep for pending items', d:'Assign specific collection windows for outstanding items, prioritising high-weight or high-value categories.'},
+    {t:'Set per-team targets', d:'Establish weekly collection goals per collector to drive productivity and provide clear performance benchmarks.'},
+    {t:'Close feedback loop with site managers', d:'Share this report with building managers weekly to maintain alignment and resolve access blockers quickly.'},
+  ];
+  recs.forEach(r=>{
+    doc.setFillColor(239,246,255);
+    doc.roundedRect(M, y, CW, 20, 3,3,'F');
+    doc.setFillColor(...C.blue);
+    doc.rect(M, y, 3, 20,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...C.blue);
+    doc.text(r.t, M+8, y+7);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.ink);
+    const dl = doc.splitTextToSize(r.d, CW-16) as string[];
+    doc.text(dl, M+8, y+14);
+    y += 24;
+  });
 }
