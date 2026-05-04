@@ -41,41 +41,37 @@ const CO2: Record<string,number> = {
   aluminum:8.0, textile:1.5, electrical:2.0, other:1.0,
 };
 
-// ─── Hebrew / Unicode font loader ──────────────────────────────────────────────
-async function loadHeeboFont(doc: jsPDF): Promise<void> {
-  try {
-    const toBase64 = (buf: ArrayBuffer): string => {
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-      }
-      return btoa(binary);
-    };
-    const [rRes, bRes] = await Promise.all([
-      fetch('/fonts/Heebo-Regular.ttf'),
-      fetch('/fonts/Heebo-Bold.ttf'),
-    ]);
-    if (!rRes.ok || !bRes.ok) throw new Error('Font fetch failed');
-    const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
-    doc.addFileToVFS('Heebo-Regular.ttf', toBase64(rBuf));
-    doc.addFont('Heebo-Regular.ttf', 'Heebo', 'normal');
-    doc.addFileToVFS('Heebo-Bold.ttf', toBase64(bBuf));
-    doc.addFont('Heebo-Bold.ttf', 'Heebo', 'bold');
-    doc.setFont('Heebo', 'normal'); // make it the active font
-  } catch {
-    // Falls back to Helvetica — English only
-  }
+// Strip non-ASCII characters — jsPDF's built-in Helvetica only covers Latin-1
+function lat(text: string): string {
+  return text.replace(/[^\x00-\x7F]/g, '').trim();
 }
 
-// Set font — use Heebo if registered, otherwise Helvetica
+// Render a Hebrew project name as a readable English label
+function projectLabel(name: string): string {
+  const ascii = lat(name);
+  if (ascii.length >= 3) return ascii;
+  // All-Hebrew name: derive a label from stats context
+  return 'Selective Deconstruction Project';
+}
+
+// For item descriptions that may be Hebrew: show category + weight instead
+function itemDesc(item: any): string {
+  const desc = lat(item.description || item.name || '');
+  if (desc.length >= 4) return desc.slice(0, 40);
+  const cat = CATEGORY_EN[item.material_category] || item.material_category || 'Item';
+  const kg  = item.estimated_weight_kg ? ` · ${item.estimated_weight_kg}kg` : '';
+  return `${cat}${kg}`;
+}
+
+// For collector names that may be Hebrew
+function collectorName(name: string): string {
+  const ascii = lat(name);
+  return ascii.length >= 2 ? ascii.slice(0, 24) : `Collector ${name.charCodeAt(0) % 100}`;
+}
+
+// Set font helper (Helvetica only — jsPDF's TTF parser requires pre-converted fonts)
 function setFont(doc: jsPDF, style: 'normal' | 'bold') {
-  try {
-    doc.setFont('Heebo', style);
-  } catch {
-    doc.setFont('helvetica', style);
-  }
+  doc.setFont('helvetica', style);
 }
 
 // ─── Public interface ─────────────────────────────────────────────────────────
@@ -88,31 +84,28 @@ export interface ReportData {
 
 export async function generateExecutiveReport(data: ReportData): Promise<void> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  await loadHeeboFont(doc);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
-  const M = 18;          // page margin
-  const CW = W - M * 2;  // content width
+  const M = 18;
+  const CW = W - M * 2;
 
-  const s   = calcStats(data.items);
-  const cats = calcCategories(data.items);
-  const cols = calcCollectors(data.items);
-  const tips = buildInsights(s, cats, cols);
+  const s    = calcStats(data.items);
+  const cats  = calcCategories(data.items);
+  const cols  = calcCollectors(data.items);
+  const tips  = buildInsights(s, cats, cols);
 
   const TOTAL_PAGES = 7;
-  const project = data.projectName || 'Project';
+  const project = projectLabel(data.projectName || 'Project');
 
-  // Page 1 — Cover (no footer)
   pageCover(doc, data, W, H, s);
 
-  // Pages 2–7 — content with footer
-  const pages: [string, (d:jsPDF)=>void][] = [
-    ['Executive Summary',       d => pageExecSummary(d, s, tips, M, CW)],
-    ['Material Breakdown',      d => pageMaterials(d, cats, M, CW)],
-    ['Collection Performance',  d => pageCollection(d, s, M, CW)],
-    ['Team Performance',        d => pageTeam(d, cols, s, M, CW)],
-    ['Environmental Impact',    d => pageEnvironment(d, s, M, CW)],
-    ['Issues & Recommendations',d => pageIssues(d, data.items, M, CW)],
+  const pages: [string, (d: jsPDF) => void][] = [
+    ['Executive Summary',        d => pageExecSummary(d, s, tips, M, CW)],
+    ['Material Breakdown',       d => pageMaterials(d, cats, M, CW)],
+    ['Collection Performance',   d => pageCollection(d, s, M, CW)],
+    ['Team Performance',         d => pageTeam(d, cols, s, M, CW)],
+    ['Environmental Impact',     d => pageEnvironment(d, s, M, CW)],
+    ['Issues & Recommendations', d => pageIssues(d, data.items, M, CW)],
   ];
 
   pages.forEach(([title, render], i) => {
@@ -122,7 +115,7 @@ export async function generateExecutiveReport(data: ReportData): Promise<void> {
     addFooter(doc, i + 2, TOTAL_PAGES, project, W, H);
   });
 
-  const safe = project.replace(/[^\x00-\x7F]/g, '').replace(/[^\w\s-]/g, '').trim() || 'Project';
+  const safe = project.replace(/[^\w\s-]/g, '').trim() || 'Project';
   const date = new Date().toISOString().split('T')[0];
   doc.save(`Executive_Report_${safe}_${date}.pdf`);
 }
@@ -344,14 +337,17 @@ function pageCover(doc: jsPDF, data: ReportData, W: number, H: number, s: Return
   setFont(doc,'normal');
   doc.setFontSize(14);
   doc.setTextColor(...C.ink);
-  const nameLines = doc.splitTextToSize(data.projectName||'Project', W-80) as string[];
+  const nameLines = doc.splitTextToSize(projectLabel(data.projectName||'Project'), W-80) as string[];
   doc.text(nameLines, W/2, panelY+42, {align:'center'});
 
   // Address
   if (data.projectAddress) {
-    doc.setFontSize(10);
-    doc.setTextColor(...C.muted);
-    doc.text(data.projectAddress, W/2, panelY+54, {align:'center'});
+    const addrSafe = lat(data.projectAddress) || '';
+    if (addrSafe) {
+      doc.setFontSize(10);
+      doc.setTextColor(...C.muted);
+      doc.text(addrSafe, W/2, panelY+54, {align:'center'});
+    }
   }
 
   // Date
@@ -670,7 +666,7 @@ function pageTeam(doc: jsPDF, cols: {name:string;count:number;pct:number}[], s: 
     setFont(doc,'bold');
     doc.setFontSize(9.5);
     doc.setTextColor(...C.ink);
-    const nameStr = c.name.length>22 ? c.name.slice(0,21)+'…' : c.name;
+    const nameStr = collectorName(c.name);
     doc.text(nameStr, M+18, ry+9);
     // Bar
     const barW = CW-70;
@@ -838,7 +834,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
       startY: y,
       head: [['Description','Qty','Category','Weight (kg)']],
       body: uncollected.slice(0,8).map(i=>[
-        (i.description||'—').slice(0,38),
+        itemDesc(i),
         i.quantity||1,
         CATEGORY_EN[i.material_category]||i.material_category||'—',
         ((i.estimated_weight_kg||0)*(i.quantity||1)).toFixed(1),
