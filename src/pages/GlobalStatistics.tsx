@@ -284,8 +284,9 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
       });
       toast.success('דוח מנהלים הורד בהצלחה');
     } catch (err) {
-      console.error('Executive report failed:', err);
-      toast.error('שגיאה ביצירת דוח מנהלים');
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Executive report failed:', msg, err);
+      toast.error(`שגיאה: ${msg.slice(0, 80)}`);
     } finally {
       setExporting(null);
     }

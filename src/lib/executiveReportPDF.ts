@@ -122,7 +122,7 @@ export async function generateExecutiveReport(data: ReportData): Promise<void> {
     addFooter(doc, i + 2, TOTAL_PAGES, project, W, H);
   });
 
-  const safe = project.replace(/[֐-׿​-‏﻿]/g, '').replace(/[^\w\s-]/g, '').trim() || 'Project';
+  const safe = project.replace(/[^\x00-\x7F]/g, '').replace(/[^\w\s-]/g, '').trim() || 'Project';
   const date = new Date().toISOString().split('T')[0];
   doc.save(`Executive_Report_${safe}_${date}.pdf`);
 }
