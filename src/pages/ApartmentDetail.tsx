@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
@@ -115,6 +115,7 @@ export default function ApartmentDetail() {
   const itemPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const roomInputRef = useRef<HTMLInputElement | null>(null);
   const multiUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const continueInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
   const [roomScanning, setRoomScanning] = useState(false);
   const [photoingItemId, setPhotoingItemId] = useState<string | null>(null);
@@ -492,10 +493,10 @@ export default function ApartmentDetail() {
     openCameraPicker();
   };
 
-  // Continue capturing in multi-photo mode
-  const continueCapturing = () => {
+  // Continue capturing — triggered by the label/input inside the dialog (trusted event)
+  const handleContinueCapture = (e: ChangeEvent<HTMLInputElement>) => {
     setShowContinueCaptureDialog(false);
-    openCameraPicker();
+    handleImageCapture(e);
   };
 
   // End multi-photo capture session
@@ -1462,20 +1463,21 @@ export default function ApartmentDetail() {
         </div>
         {/* Row 2 — Secondary actions: horizontally scrollable so all are reachable */}
         <div className="flex gap-1.5 overflow-x-auto px-2 pb-2 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+          {/* ── צלם — single-shot: takes ONE photo → AI creates one item ── */}
           <Button
             onClick={openCameraPicker}
             size="sm"
             variant={scanning && !multiPhotoMode ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiPhotoMode}
-            className="flex-shrink-0 gap-1.5 h-10 px-3 min-w-[64px] flex-col py-1.5 h-auto"
-            title="צלם פריט בודד (AI)"
+            className="flex-shrink-0 flex-col gap-1 py-1.5 px-3 min-w-[60px] h-auto border-sky-400 text-sky-700 hover:bg-sky-50 disabled:opacity-40"
+            title="צלם פריט — צילום יחיד, AI מזהה ויוצר פריט"
           >
             {scanning && !multiPhotoMode ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground" />
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-sky-500" />
             ) : (
-              <ImagePlus className="h-4 w-4" />
+              <Camera className="h-4 w-4 text-sky-600" />
             )}
-            <span className="text-[10px] leading-none">צלם</span>
+            <span className="text-[10px] leading-none font-medium">צלם</span>
           </Button>
           <Button
             onClick={openMultiUploadPicker}
@@ -1499,21 +1501,26 @@ export default function ApartmentDetail() {
               </>
             )}
           </Button>
+          {/* ── רציף — continuous session: keeps opening camera after each item ── */}
           <Button
-            onClick={startMultiPhotoMode}
+            onClick={multiPhotoMode ? endMultiPhotoMode : startMultiPhotoMode}
             size="sm"
             variant={multiPhotoMode ? 'default' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiUploading}
-            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto border-primary/40"
-            title="צילום רציף — צלם מספר פריטים ללא הפסקה"
+            className={`flex-shrink-0 flex-col gap-1 py-1.5 px-3 min-w-[60px] h-auto ${
+              multiPhotoMode
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
+                : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50'
+            }`}
+            title={multiPhotoMode ? `עצור סשן רציף (${photoCaptureCount} פריטים)` : 'רציף — פתח סשן צילום רב-פריטי'}
           >
             {multiPhotoMode && scanning ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
             ) : (
-              <Camera className="h-4 w-4" />
+              <Repeat2 className="h-4 w-4" />
             )}
-            <span className="text-[10px] leading-none">
-              {multiPhotoMode && photoCaptureCount > 0 ? `רציף (${photoCaptureCount})` : 'רציף'}
+            <span className="text-[10px] leading-none font-medium">
+              {multiPhotoMode ? `עצור (${photoCaptureCount})` : 'רציף'}
             </span>
           </Button>
           <Button
@@ -1636,26 +1643,45 @@ export default function ApartmentDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Multi-photo continue capture dialog */}
+      {/* Multi-photo continue capture dialog
+          ⚠️  "צלם עוד" MUST be a <label> that directly triggers the file input —
+          programmatic .click() from a button callback is blocked on iOS/Android */}
       <Dialog open={showContinueCaptureDialog} onOpenChange={(open) => { if (!open) endMultiPhotoMode(); }}>
         <DialogContent dir="rtl" className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>פריט נוסף בהצלחה</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-emerald-500" />
+              פריט {photoCaptureCount} נוסף!
+            </DialogTitle>
             <DialogDescription>
-              {photoCaptureCount} תמונות צולמו עד כה. להמשיך לצלם?
+              לחץ "צלם עוד" לצילום הפריט הבא, או "סיום" לסיום הסשן.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" onClick={endMultiPhotoMode}>
+            <Button variant="outline" onClick={endMultiPhotoMode} className="gap-2">
+              <X className="h-4 w-4" />
               סיום ({photoCaptureCount})
             </Button>
-            <Button onClick={continueCapturing} className="gap-2">
-              <Camera className="h-4 w-4" />
-              צלם עוד
-            </Button>
+            {/* Label triggers continueInputRef directly — trusted user gesture, works on mobile */}
+            <label htmlFor="fc-continue-capture" className="cursor-pointer">
+              <span className="inline-flex items-center gap-2 h-9 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors select-none">
+                <Camera className="h-4 w-4" />
+                צלם עוד
+              </span>
+            </label>
           </div>
         </DialogContent>
       </Dialog>
+      {/* Dedicated input for the continue-capture label above */}
+      <input
+        id="fc-continue-capture"
+        ref={continueInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleContinueCapture}
+      />
 
       {/* Gmail-style undo flyout — appears for 5s after every auto-insert batch. */}
       <UndoFlyout
