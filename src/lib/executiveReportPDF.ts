@@ -1,6 +1,6 @@
 /**
  * Executive PDF Report — McKinsey-style Selective Deconstruction Report
- * English throughout (jsPDF built-in fonts have no Hebrew glyph support)
+ * Uses Heebo font (fetched at runtime) for full Hebrew + Latin support.
  *
  * Pages:
  *  1. Cover — project identity + live KPI preview
@@ -41,6 +41,41 @@ const CO2: Record<string,number> = {
   aluminum:8.0, textile:1.5, electrical:2.0, other:1.0,
 };
 
+// ─── Hebrew / Unicode font loader ──────────────────────────────────────────────
+async function loadHeeboFont(doc: jsPDF): Promise<void> {
+  try {
+    const toBase64 = (buf: ArrayBuffer): string => {
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    };
+    const [rRes, bRes] = await Promise.all([
+      fetch('/fonts/Heebo-Regular.ttf'),
+      fetch('/fonts/Heebo-Bold.ttf'),
+    ]);
+    const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
+    doc.addFileToVFS('Heebo-Regular.ttf', toBase64(rBuf));
+    doc.addFont('Heebo-Regular.ttf', 'Heebo', 'normal');
+    doc.addFileToVFS('Heebo-Bold.ttf', toBase64(bBuf));
+    doc.addFont('Heebo-Bold.ttf', 'Heebo', 'bold');
+  } catch {
+    // Falls back to Helvetica — English only
+  }
+}
+
+// Set font — use Heebo if registered, otherwise Helvetica
+function setFont(doc: jsPDF, style: 'normal' | 'bold') {
+  try {
+    doc.setFont('Heebo', style);
+  } catch {
+    doc.setFont('helvetica', style);
+  }
+}
+
 // ─── Public interface ─────────────────────────────────────────────────────────
 export interface ReportData {
   projectName: string;
@@ -51,6 +86,7 @@ export interface ReportData {
 
 export async function generateExecutiveReport(data: ReportData): Promise<void> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  await loadHeeboFont(doc);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 18;          // page margin
@@ -84,7 +120,7 @@ export async function generateExecutiveReport(data: ReportData): Promise<void> {
     addFooter(doc, i + 2, TOTAL_PAGES, project, W, H);
   });
 
-  const safe = project.replace(/[^\w\s-]/g, '').trim() || 'Project';
+  const safe = project.replace(/[֐-׿​-‏﻿]/g, '').replace(/[^\w\s-]/g, '').trim() || 'Project';
   const date = new Date().toISOString().split('T')[0];
   doc.save(`Executive_Report_${safe}_${date}.pdf`);
 }
@@ -163,7 +199,7 @@ function sectionHeader(doc: jsPDF, title: string, W: number) {
   doc.setFillColor(...C.green);
   doc.rect(0,0,4,16,'F');
   doc.setTextColor(...C.white);
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.text(title, W/2, 11, {align:'center'});
 }
@@ -172,7 +208,7 @@ function addFooter(doc: jsPDF, page: number, total: number, project: string, W: 
   doc.setFillColor(...C.navy);
   doc.rect(0, H-9, W, 9, 'F');
   doc.setTextColor(...C.white);
-  doc.setFont('helvetica','normal');
+  setFont(doc,'normal');
   doc.setFontSize(6.5);
   doc.text(project, 10, H-3.5);
   doc.text('CONFIDENTIAL', W/2, H-3.5, {align:'center'});
@@ -189,11 +225,11 @@ function kpiCard(doc: jsPDF, x: number, y: number, w: number, h: number,
   // Top color stripe
   doc.setFillColor(...accent);
   doc.rect(x,y,w,3,'F');
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(15);
   doc.setTextColor(...C.ink);
   doc.text(value, x+w/2, y+15, {align:'center'});
-  doc.setFont('helvetica','normal');
+  setFont(doc,'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...C.muted);
   doc.text(label, x+w/2, y+22, {align:'center'});
@@ -208,10 +244,10 @@ function insightBox(doc: jsPDF, x: number, y: number, w: number, text: string, c
   doc.setFillColor(...color);
   doc.rect(x,y,3,bh,'F');
   doc.setFontSize(8);
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setTextColor(...color);
   doc.text('▸', x+6, y+6);
-  doc.setFont('helvetica','normal');
+  setFont(doc,'normal');
   doc.setTextColor(...C.ink);
   doc.text(lines, x+12, y+6);
   return bh+3;
@@ -287,13 +323,13 @@ function pageCover(doc: jsPDF, data: ReportData, W: number, H: number, s: Return
 
   // Eyebrow
   doc.setTextColor(...C.green);
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(9);
   doc.text('SELECTIVE DECONSTRUCTION', W/2, panelY+12, {align:'center'});
 
   // Main title
   doc.setTextColor(...C.navy);
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(22);
   doc.text('Executive Report', W/2, panelY+26, {align:'center'});
 
@@ -303,7 +339,7 @@ function pageCover(doc: jsPDF, data: ReportData, W: number, H: number, s: Return
   doc.line(W/2-35, panelY+31, W/2+35, panelY+31);
 
   // Project name
-  doc.setFont('helvetica','normal');
+  setFont(doc,'normal');
   doc.setFontSize(14);
   doc.setTextColor(...C.ink);
   const nameLines = doc.splitTextToSize(data.projectName||'Project', W-80) as string[];
@@ -344,10 +380,10 @@ function pageCover(doc: jsPDF, data: ReportData, W: number, H: number, s: Return
       doc.line(i*kw, stripY+8, i*kw, stripY+stripH-8);
     }
     doc.setTextColor(...C.white);
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(16);
     doc.text(k.v, kx, stripY+stripH*0.42, {align:'center'});
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...C.muted);
     doc.text(k.l, kx, stripY+stripH*0.68, {align:'center'});
@@ -364,7 +400,7 @@ function pageExecSummary(doc: jsPDF, s: ReturnType<typeof calcStats>, tips: stri
   let y = 26;
 
   // Section label
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.navy);
   doc.text('Key Performance Indicators', M, y);
@@ -388,7 +424,7 @@ function pageExecSummary(doc: jsPDF, s: ReturnType<typeof calcStats>, tips: stri
   y += 2*(ch+4)+6;
 
   // Key Insights
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.navy);
   doc.text('Key Insights', M, y);
@@ -410,11 +446,11 @@ function pageExecSummary(doc: jsPDF, s: ReturnType<typeof calcStats>, tips: stri
   doc.roundedRect(M, y, CW, 32, 4,4,'F');
   doc.setFillColor(...C.blue);
   doc.rect(M, y, 3, 32,'F');
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(9);
   doc.setTextColor(...C.blue);
   doc.text('Assessment', M+8, y+8);
-  doc.setFont('helvetica','normal');
+  setFont(doc,'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...C.ink);
   const sl = doc.splitTextToSize(summaryText, CW-16) as string[];
@@ -424,7 +460,7 @@ function pageExecSummary(doc: jsPDF, s: ReturnType<typeof calcStats>, tips: stri
 // ─── Page 3: Material Breakdown ───────────────────────────────────────────────
 function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
   let y = 26;
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.navy);
   doc.text('Material Distribution', M, y);
@@ -447,11 +483,11 @@ function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
     cats.map((c,i)=>({value:c.count, color:PALETTE[i%PALETTE.length]})));
 
   // Center label
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.ink);
   doc.text(cats.reduce((s,c)=>s+c.count,0).toString(), donutCX, donutCY-2, {align:'center'});
-  doc.setFont('helvetica','normal');
+  setFont(doc,'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(...C.muted);
   doc.text('items', donutCX, donutCY+5, {align:'center'});
@@ -464,11 +500,11 @@ function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
     const rgb = hex2rgb(PALETTE[i%PALETTE.length]);
     doc.setFillColor(...rgb);
     doc.roundedRect(legendX, ly, 7, 7, 1,1,'F');
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(...C.ink);
     doc.text(c.label, legendX+10, ly+5.5);
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...C.muted);
     doc.text(`${c.count} items · ${c.pct.toFixed(1)}%`, legendX+10, ly+12);
@@ -477,7 +513,7 @@ function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
   y += 100;
 
   // ── Bar chart ──
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(10);
   doc.setTextColor(...C.navy);
   doc.text('Count by Category', M, y);
@@ -488,7 +524,7 @@ function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
   const barH = 9;
   cats.slice(0,8).forEach((c,i)=>{
     const by = y + i*(barH+5);
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...C.ink);
     doc.text(c.label, M, by+barH-1);
@@ -497,7 +533,7 @@ function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
     doc.roundedRect(M+22, by, barsW, barH, 2,2,'F');
     doc.setFillColor(...rgb);
     doc.roundedRect(M+22, by, Math.max(barsW*c.count/maxCnt,3), barH, 2,2,'F');
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(7);
     doc.setTextColor(...C.ink);
     doc.text(c.count.toString(), M+22+barsW+3, by+barH-1);
@@ -513,7 +549,7 @@ function pageMaterials(doc: jsPDF, cats: CatStat[], M: number, CW: number) {
       c.label, c.count, `${c.pct.toFixed(1)}%`, c.weight.toFixed(1),
       `${(CO2[c.name]||1).toFixed(1)} kg/kg`,
     ]),
-    theme:'striped',
+    theme:'striped', styles:{font:'Heebo'},
     headStyles:{fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:8},
     bodyStyles:{fontSize:8},
     columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},
@@ -538,12 +574,12 @@ function pageCollection(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number, 
   doc.setFillColor(...C.green);
   doc.rect(M, y, 4, 44,'F');
 
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(36);
   doc.setTextColor(...C.green);
   const cx = M+CW/2;
   doc.text(`${s.rate.toFixed(1)}%`, cx, y+26, {align:'center'});
-  doc.setFont('helvetica','normal');
+  setFont(doc,'normal');
   doc.setFontSize(10);
   doc.setTextColor(...C.ink);
   doc.text('Collection Rate', cx, y+38, {align:'center'});
@@ -551,7 +587,7 @@ function pageCollection(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number, 
   y += 55;
 
   // Status bars
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.navy);
   doc.text('Status Breakdown', M, y);
@@ -565,12 +601,12 @@ function pageCollection(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number, 
   ];
 
   rows.forEach(r=>{
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(9);
     doc.setTextColor(...C.ink);
     doc.text(r.label, M, y+8);
     progressBar(doc, M+32, y+2, CW-70, 10, r.pct, r.color);
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(8);
     doc.setTextColor(...C.muted);
     doc.text(`${r.value} (${r.pct.toFixed(1)}%)`, M+CW-3, y+9, {align:'right'});
@@ -602,7 +638,7 @@ function pageCollection(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number, 
 // ─── Page 5: Team Performance ─────────────────────────────────────────────────
 function pageTeam(doc: jsPDF, cols: {name:string;count:number;pct:number}[], s: ReturnType<typeof calcStats>, M: number, CW: number) {
   let y = 26;
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.navy);
   doc.text('Collector Leaderboard', M, y);
@@ -624,12 +660,12 @@ function pageTeam(doc: jsPDF, cols: {name:string;count:number;pct:number}[], s: 
     const rgb = i<3 ? hex2rgb(['#F59E0B','#9CA3AF','#CD7F32'][i]) : C.muted;
     doc.setFillColor(...rgb);
     doc.circle(M+7, ry+8, 7,'F');
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(9);
     doc.setTextColor(...C.white);
     doc.text((i+1).toString(), M+7, ry+11, {align:'center'});
     // Name
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(9.5);
     doc.setTextColor(...C.ink);
     const nameStr = c.name.length>22 ? c.name.slice(0,21)+'…' : c.name;
@@ -641,7 +677,7 @@ function pageTeam(doc: jsPDF, cols: {name:string;count:number;pct:number}[], s: 
     doc.setFillColor(...C.blue);
     doc.roundedRect(M+18, ry+12, Math.max(barW*c.count/maxC,3), 8, 2,2,'F');
     // Count
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(8);
     doc.setTextColor(...C.muted);
     doc.text(`${c.count} items · ${c.pct.toFixed(0)}%`, M+CW-2, ry+9, {align:'right'});
@@ -668,7 +704,7 @@ function pageTeam(doc: jsPDF, cols: {name:string;count:number;pct:number}[], s: 
 // ─── Page 6: Environmental Impact ─────────────────────────────────────────────
 function pageEnvironment(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number, CW: number) {
   let y = 26;
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.navy);
   doc.text('Environmental Impact Summary', M, y);
@@ -688,14 +724,14 @@ function pageEnvironment(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number,
     doc.roundedRect(cx2, y, cw, ch, 5,5,'F');
     doc.setFillColor(...C.green);
     doc.rect(cx2, y, cw, 4,'F');
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(7);
     doc.setTextColor(...C.green);
     doc.text(c.label.toUpperCase(), cx2+cw/2, y+12, {align:'center'});
     doc.setFontSize(20);
     doc.setTextColor(...C.green);
     doc.text(c.value, cx2+cw/2, y+28, {align:'center'});
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(8);
     doc.setTextColor(...C.muted);
     doc.text(c.unit, cx2+cw/2, y+36, {align:'center'});
@@ -709,7 +745,7 @@ function pageEnvironment(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number,
   const collectedWeight = s.weight*(s.rate/100);
   const pendingWeight   = s.weight - collectedWeight;
   if (s.weight>0) {
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(10);
     doc.setTextColor(...C.navy);
     doc.text('Weight Recovered vs Outstanding', M, y);
@@ -719,11 +755,11 @@ function pageEnvironment(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number,
       {value:collectedWeight, color:'#10B981'},
       {value:pendingWeight,   color:'#F59E0B'},
     ]);
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(8);
     doc.setTextColor(...C.ink);
     doc.text(`${s.rate.toFixed(0)}%`, M+30, y+29, {align:'center'});
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(6);
     doc.setTextColor(...C.muted);
     doc.text('recovered', M+30, y+35, {align:'center'});
@@ -735,11 +771,11 @@ function pageEnvironment(doc: jsPDF, s: ReturnType<typeof calcStats>, M: number,
       const ly = y+10+i*16;
       doc.setFillColor(...(col as [number,number,number]));
       doc.roundedRect(lx, ly, 8, 8, 1,1,'F');
-      doc.setFont('helvetica','bold');
+      setFont(doc,'bold');
       doc.setFontSize(9);
       doc.setTextColor(...C.ink);
       doc.text(lbl, lx+12, ly+6);
-      doc.setFont('helvetica','normal');
+      setFont(doc,'normal');
       doc.setFontSize(8);
       doc.setTextColor(...C.muted);
       doc.text(`${val} kg`, lx+12, ly+13);
@@ -760,7 +796,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
   const noAttribution = items.filter(i=>i.collected&&!i.collected_by);
 
   // Issue summary table
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(11);
   doc.setTextColor(...C.navy);
   doc.text('Issue Summary', M, y);
@@ -773,7 +809,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
       ['Items not yet collected (flagged for collection)', uncollected.length, uncollected.length>10?'HIGH':'MEDIUM'],
       ['Collected items with no attribution', noAttribution.length, noAttribution.length>5?'HIGH':'LOW'],
     ],
-    theme:'grid',
+    theme:'grid', styles:{font:'Heebo'},
     headStyles:{fillColor:C.navy,textColor:C.white,fontStyle:'bold',fontSize:8},
     bodyStyles:{fontSize:8.5},
     columnStyles:{1:{halign:'right',cellWidth:22},2:{halign:'center',cellWidth:22}},
@@ -791,7 +827,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
 
   // Top uncollected items
   if (uncollected.length>0) {
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(10);
     doc.setTextColor(...C.navy);
     doc.text(`Top Pending Items (showing ${Math.min(8,uncollected.length)} of ${uncollected.length})`, M, y);
@@ -805,7 +841,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
         CATEGORY_EN[i.material_category]||i.material_category||'—',
         ((i.estimated_weight_kg||0)*(i.quantity||1)).toFixed(1),
       ]),
-      theme:'striped',
+      theme:'striped', styles:{font:'Heebo'},
       headStyles:{fillColor:C.amber,textColor:C.white,fontStyle:'bold',fontSize:8},
       bodyStyles:{fontSize:8},
       columnStyles:{1:{halign:'right'},3:{halign:'right'}},
@@ -815,7 +851,7 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
   }
 
   // Recommendations
-  doc.setFont('helvetica','bold');
+  setFont(doc,'bold');
   doc.setFontSize(10);
   doc.setTextColor(...C.navy);
   doc.text('Strategic Recommendations', M, y);
@@ -832,11 +868,11 @@ function pageIssues(doc: jsPDF, items: any[], M: number, CW: number) {
     doc.roundedRect(M, y, CW, 20, 3,3,'F');
     doc.setFillColor(...C.blue);
     doc.rect(M, y, 3, 20,'F');
-    doc.setFont('helvetica','bold');
+    setFont(doc,'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(...C.blue);
     doc.text(r.t, M+8, y+7);
-    doc.setFont('helvetica','normal');
+    setFont(doc,'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...C.ink);
     const dl = doc.splitTextToSize(r.d, CW-16) as string[];
