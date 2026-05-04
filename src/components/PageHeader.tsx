@@ -64,7 +64,7 @@ export function PageHeader({
         {/* ── Title block ──────────────────────────────────────── */}
         <div className="flex-1 min-w-0">
           {subtitle && (
-            <p className="text-[10px] tracking-widest uppercase text-sidebar-foreground/50 truncate leading-none mb-0.5">
+            <p className="text-[10px] tracking-widest text-sidebar-foreground/50 truncate leading-none mb-0.5">
               {subtitle}
             </p>
           )}

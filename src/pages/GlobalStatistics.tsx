@@ -300,6 +300,7 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
     <div className="min-h-screen bg-muted" dir="rtl">
       <PageHeader
         title="סטטיסטיקות כלליות"
+        subtitle={stats ? `${stats.totalItems} פריטים · ${stats.collected} נאספו · ${collectedPercentage}% שיעור איסוף` : undefined}
         actions={
           <div className="flex items-center gap-2">
             <Button

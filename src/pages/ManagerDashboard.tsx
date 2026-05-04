@@ -196,6 +196,7 @@ export default function ManagerDashboard() {
     <div className="min-h-screen bg-muted" dir="rtl">
       <PageHeader
         title="לוח בקרה"
+        subtitle={stats ? `${stats.totalItems.toLocaleString()} פריטים · ${stats.collectionRate.toFixed(0)}% נאספו` : 'מבט על ומעקב ביצועים'}
         onBack={() => navigate(-1)}
       />
 

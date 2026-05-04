@@ -123,10 +123,17 @@ export default function Dashboard() {
         <div className="absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-primary/15 blur-2xl pointer-events-none" />
 
         <div className="relative z-10">
-          {/* Eyebrow greeting */}
-          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-sidebar-foreground/50 mb-2.5">
-            {greet}{userName ? `, ${userName.split(' ')[0]}` : ''}
-          </p>
+          {/* Greeting row */}
+          <div className="flex items-baseline gap-2 mb-3">
+            <span className="text-[11px] font-bold tracking-[0.18em] uppercase text-sidebar-foreground/50">
+              {greet}
+            </span>
+            {userName && (
+              <span className="text-lg font-extrabold tracking-tight text-sidebar-foreground leading-none">
+                {userName.split(' ')[0]}
+              </span>
+            )}
+          </div>
 
           {/* Primary headline */}
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-none mb-3">

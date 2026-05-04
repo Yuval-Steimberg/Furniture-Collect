@@ -314,6 +314,7 @@ export default function DataExplorer() {
 
       <PageHeader
         title="חוקר נתונים"
+        subtitle={`${filteredItems.length} תוצאות${activeFiltersCount > 0 ? ` · ${activeFiltersCount} סינונים פעילים` : ''}`}
         actions={
           <div className="flex items-center gap-1.5">
             {activeFiltersCount > 0 && (
