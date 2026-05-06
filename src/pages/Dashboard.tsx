@@ -11,10 +11,27 @@ import { StatCard } from '@/components/StatCard';
 import { SkeletonStatCard, SkeletonProjectCard } from '@/components/SkeletonCard';
 import { EmptyState } from '@/components/EmptyState';
 import {
-  Package, Leaf, Building2, TrendingUp, Plus, ScanLine, FileText,
-  ArrowLeft, Clock, Sparkles,
+  Package, Leaf, Building2, TrendingUp, Plus,
+  ArrowLeft, Clock, Sparkles, Menu,
 } from 'lucide-react';
+import { useSidebar } from '@/components/ui/sidebar';
 import { summarise, formatKg, formatCO2, type ReportItem } from '@/lib/sustainability';
+
+function DashboardMenuButton() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <button
+      type="button"
+      onClick={toggleSidebar}
+      aria-label="פתח תפריט"
+      className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg
+                 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent
+                 transition-colors flex-shrink-0"
+    >
+      <Menu className="h-5 w-5" />
+    </button>
+  );
+}
 
 interface ProjectMini {
   id: string;
@@ -117,23 +134,48 @@ export default function Dashboard() {
   return (
     <div dir="rtl" className="w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-6 sm:space-y-8">
       {/* Welcome banner */}
-      <section className="relative overflow-hidden rounded-2xl bg-sidebar text-sidebar-foreground p-5 sm:p-7">
-        <div className="relative z-10">
-          <p className="text-sm text-sidebar-foreground/70 mb-1">{greet}{userName ? `, ${userName.split(' ')[0]}` : ''}</p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            {totals.itemCount > 0
-              ? `${formatKg(totals.diverted_kg)} הוצלו מהטמנה`
-              : 'מוכנים לתעד את הפרויקט הראשון'}
-          </h1>
-          {totals.itemCount > 0 && (
-            <p className="mt-1 text-sm text-sidebar-foreground/80">
-              {formatCO2(totals.co2_saved_kg)} נחסכו · על פני {totals.projectCount} {totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}
-            </p>
-          )}
+      <section className="relative overflow-hidden rounded-2xl bg-sidebar text-sidebar-foreground">
+        {/* Top row: greeting + menu button */}
+        <div dir="ltr" className="flex items-center justify-between px-5 pt-5 sm:px-7 sm:pt-7 pb-1">
+          <DashboardMenuButton />
+          <p className="text-sm text-sidebar-foreground/60 font-semibold tracking-wide">
+            {greet}{userName ? `, ${userName.split(' ')[0]}` : ''}
+          </p>
         </div>
-        {/* Decorative sage circle in corner */}
+
+        {/* Main content */}
+        <div className="relative z-10 px-5 pb-6 sm:px-7 sm:pb-7">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight mb-1">
+            {totals.itemCount > 0 ? (
+              <>
+                <span className="text-primary">{totals.itemCount}</span>
+                {' פריטים רשומים'}
+              </>
+            ) : (
+              'מוכנים לתעד את הפרויקט הראשון'
+            )}
+          </h1>
+          <p className="text-sm text-sidebar-foreground/70">
+            {totals.itemCount > 0 ? (
+              <>
+                {totals.collectedCount} נאספו
+                <span className="mx-1.5 opacity-40">·</span>
+                {totals.itemCount - totals.collectedCount} ממתינים
+                {totals.diverted_kg > 0 && (
+                  <>
+                    <span className="mx-1.5 opacity-40">·</span>
+                    {formatKg(totals.diverted_kg)} הוצלו מהטמנה
+                  </>
+                )}
+              </>
+            ) : (
+              `${totals.projectCount} פרויקטים · התחל בתיעוד פריטים`
+            )}
+          </p>
+        </div>
+
+        {/* Decorative */}
         <div className="absolute -left-8 -bottom-8 h-36 w-36 rounded-full bg-accent/20 blur-sm pointer-events-none" />
-        <div className="absolute left-16 top-2 h-16 w-16 rounded-full bg-primary/40 pointer-events-none" />
       </section>
 
       {/* Quick actions */}
