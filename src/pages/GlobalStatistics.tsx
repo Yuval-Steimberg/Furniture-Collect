@@ -616,12 +616,12 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
             {categoryViewMode === 'bar' && (
               <ResponsiveContainer
                 width="100%"
-                height={Math.max(260, (stats?.materialChartData?.length || 0) * 44 + 40)}
+                height={Math.max(300, (stats?.materialChartData?.length || 0) * 56 + 40)}
               >
                 <BarChart
                   data={stats?.materialChartData || []}
                   layout="vertical"
-                  margin={{ top: 4, right: 90, left: 16, bottom: 4 }}
+                  margin={{ top: 4, right: 110, left: 8, bottom: 4 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} opacity={0.4} />
                   <XAxis
@@ -634,9 +634,9 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                     dataKey="name"
                     type="category"
                     orientation="right"
-                    width={82}
+                    width={100}
                     tick={{ fontSize: 12, fill: '#374151' }}
-                    tickMargin={6}
+                    tickMargin={8}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -648,7 +648,7 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                     contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 13 }}
                     cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                   />
-                  <Bar dataKey="count" radius={[0, 5, 5, 0]} barSize={22} maxBarSize={30}>
+                  <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={30} maxBarSize={38}>
                     {stats?.materialChartData?.map((_: any, index: number) => (
                       <Cell key={`bar-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
