@@ -586,17 +586,17 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className={categoryViewMode === 'bar' ? 'p-0' : undefined}>
             {categoryViewMode === 'list' && (
               <div className="space-y-2">
                 {stats?.materialChartData?.map((item: any, index: number) => (
-                  <div 
-                    key={item.name} 
+                  <div
+                    key={item.name}
                     className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div 
-                        className="w-3 h-3 rounded-full flex-shrink-0" 
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: COLORS[index % COLORS.length] }}
                       />
                       <span className="font-medium">{item.name}</span>
@@ -612,11 +612,12 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                 ))}
               </div>
             )}
-            
+
             {categoryViewMode === 'bar' && (
+              <div className="flex items-center justify-center w-full px-2 py-4">
               <ResponsiveContainer
                 width="100%"
-                height={Math.max(300, (stats?.materialChartData?.length || 0) * 56 + 40)}
+                height={(stats?.materialChartData?.length || 0) * 60 + 40}
               >
                 <BarChart
                   data={stats?.materialChartData || []}
@@ -655,6 +656,7 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             )}
 
             {categoryViewMode === 'pie' && (
