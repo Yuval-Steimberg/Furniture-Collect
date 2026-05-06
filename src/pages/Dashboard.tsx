@@ -24,9 +24,9 @@ function DashboardMenuButton() {
       type="button"
       onClick={toggleSidebar}
       aria-label="פתח תפריט"
-      className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg
+      className="flex items-center justify-center h-8 w-8 rounded-lg
                  text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent
-                 transition-colors flex-shrink-0"
+                 transition-colors"
     >
       <Menu className="h-5 w-5" />
     </button>
@@ -135,26 +135,36 @@ export default function Dashboard() {
     <div dir="rtl" className="w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-6 sm:space-y-8">
       {/* Welcome banner */}
       <section className="relative overflow-hidden rounded-2xl bg-sidebar text-sidebar-foreground">
-        {/* Top row: greeting + menu button */}
-        <div dir="ltr" className="flex items-center justify-between px-5 pt-5 sm:px-7 sm:pt-7 pb-1">
-          <DashboardMenuButton />
-          <p className="text-sm text-sidebar-foreground/60 font-semibold tracking-wide">
-            {greet}{userName ? `, ${userName.split(' ')[0]}` : ''}
-          </p>
-        </div>
+        <div className="absolute -left-8 -bottom-8 h-36 w-36 rounded-full bg-accent/20 blur-sm pointer-events-none" />
 
-        {/* Main content */}
-        <div className="relative z-10 px-5 pb-6 sm:px-7 sm:pb-7">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight mb-1">
-            {totals.itemCount > 0 ? (
-              <>
-                <span className="text-primary">{totals.itemCount}</span>
-                {' פריטים רשומים'}
-              </>
-            ) : (
-              'מוכנים לתעד את הפרויקט הראשון'
-            )}
-          </h1>
+        <div dir="rtl" className="relative z-10 px-5 pt-4 pb-6 sm:px-7 sm:pt-5 sm:pb-7">
+          {/* Menu button — first child in RTL flex lands on physical right */}
+          <div className="flex mb-3 md:hidden">
+            <DashboardMenuButton />
+          </div>
+
+          {/* Greeting */}
+          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-sidebar-foreground/50 mb-3">
+            {greet}{userName ? ` · ${userName.split(' ')[0]}` : ''}
+          </p>
+
+          {/* Headline: big number + label on next line */}
+          {totals.itemCount > 0 ? (
+            <div className="mb-2">
+              <div className="text-5xl font-extrabold tracking-tight leading-none text-primary">
+                {totals.itemCount}
+              </div>
+              <div className="text-xl font-bold text-sidebar-foreground mt-1">
+                פריטים רשומים
+              </div>
+            </div>
+          ) : (
+            <h1 className="text-2xl font-extrabold tracking-tight leading-tight mb-2">
+              מוכנים לתעד את הפרויקט הראשון
+            </h1>
+          )}
+
+          {/* Stats line */}
           <p className="text-sm text-sidebar-foreground/70">
             {totals.itemCount > 0 ? (
               <>
@@ -173,9 +183,6 @@ export default function Dashboard() {
             )}
           </p>
         </div>
-
-        {/* Decorative */}
-        <div className="absolute -left-8 -bottom-8 h-36 w-36 rounded-full bg-accent/20 blur-sm pointer-events-none" />
       </section>
 
       {/* Quick actions */}
