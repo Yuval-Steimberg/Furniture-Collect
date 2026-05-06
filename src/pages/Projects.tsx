@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import type { Session } from '@supabase/supabase-js';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonProjectCard } from '@/components/SkeletonCard';
+import { PageHeader } from '@/components/PageHeader';
 
 interface Profile {
   id: string;
@@ -468,43 +469,21 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-sidebar text-sidebar-foreground shadow-md">
-        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-primary-foreground/20 flex items-center justify-center flex-shrink-0">
-                <HardHat className="h-5 w-5 sm:h-6 sm:w-6" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-base sm:text-xl font-bold truncate">מערכת תיעוד פינוי</h1>
-                <p className="text-xs sm:text-sm text-primary-foreground/80 truncate">{profile?.name}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-              <Badge variant="secondary" className="hidden sm:flex text-xs">
-                {profile?.org_role === 'ORG_ADMIN' ? 'מנהל ארגון' : 
-                 profile?.org_role === 'PROJECT_MANAGER' ? 'מנהל פרויקט' : 'עובד'}
-              </Badge>
-              <Button variant="ghost" size="icon" onClick={handleSignOut} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9 sm:h-10 sm:w-10">
-                <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="הפרויקטים שלי"
+        subtitle={profile?.name ?? undefined}
+        actions={
+          profile?.org_role === 'ORG_ADMIN' ? (
+            <Button onClick={() => navigate('/projects/new')} size="sm"
+              className="gap-1.5 h-8 px-3 text-sm font-semibold">
+              <Plus className="h-4 w-4" />
+              פרויקט חדש
+            </Button>
+          ) : undefined
+        }
+      />
 
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        {/* Page title + new project */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 sm:mb-5">
-          <h2 className="text-xl sm:text-2xl font-bold">הפרויקטים שלי</h2>
-          {profile?.org_role === 'ORG_ADMIN' && (
-            <Button onClick={() => navigate('/projects/new')} className="gap-2 w-full sm:w-auto h-11 sm:h-10">
-              <Plus className="h-4 w-4" />
-              <span>פרויקט חדש</span>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] opacity-60 border border-primary-foreground/30 rounded px-1 py-0.5 ml-1">⌘N</kbd>
-            </Button>
-          )}
-        </div>
 
         {/* Stats strip */}
         {projects.length > 0 && (
