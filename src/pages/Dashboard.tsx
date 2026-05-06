@@ -227,7 +227,7 @@ export default function Dashboard() {
               <StatCard
                 label="הופנו מהטמנה"
                 value={formatKg(totals.diverted_kg)}
-                sub={`${totals.collectedCount} פריטים`}
+                sub={`${totals.collectedCount} נאספו`}
                 icon={Leaf}
                 accent="sage"
               />

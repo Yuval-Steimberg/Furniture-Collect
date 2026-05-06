@@ -471,7 +471,6 @@ export default function Projects() {
     <div className="min-h-screen bg-muted" dir="rtl">
       <PageHeader
         title="הפרויקטים שלי"
-        subtitle={profile?.name ?? undefined}
         actions={
           profile?.org_role === 'ORG_ADMIN' ? (
             <Button onClick={() => navigate('/projects/new')} size="sm"
@@ -484,6 +483,18 @@ export default function Projects() {
       />
 
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
+
+        {/* User greeting */}
+        {profile?.name && (
+          <div dir="rtl" className="mb-4">
+            <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-muted-foreground/60 leading-none mb-0.5">
+              {profile.org_role === 'ORG_ADMIN' ? 'מנהל ארגון' : profile.org_role === 'PROJECT_MANAGER' ? 'מנהל פרויקט' : 'עובד'}
+            </p>
+            <h2 className="text-2xl font-extrabold tracking-tight text-foreground leading-tight">
+              {profile.name}
+            </h2>
+          </div>
+        )}
 
         {/* Stats strip */}
         {projects.length > 0 && (
