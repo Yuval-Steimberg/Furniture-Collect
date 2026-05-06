@@ -157,6 +157,9 @@ export default function Dashboard() {
               <div className="text-xl font-bold text-sidebar-foreground mt-1">
                 פריטים רשומים
               </div>
+              <div className="text-xs text-sidebar-foreground/50 mt-0.5">
+                פריטי ריהוט שתועדו על פני {totals.projectCount} {totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}
+              </div>
             </div>
           ) : (
             <h1 className="text-2xl font-extrabold tracking-tight leading-tight mb-2">
