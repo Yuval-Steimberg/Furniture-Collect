@@ -14,7 +14,7 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   return (
     <InAppLayoutContext.Provider value={true}>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={false}>
         <div className="flex min-h-screen w-full">
           {/* main comes first so sidebar (side="right") stays on the physical right */}
           <main className="flex-1 relative min-w-0">

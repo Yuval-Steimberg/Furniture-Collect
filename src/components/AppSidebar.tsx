@@ -60,7 +60,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar side="right" className="border-l border-sidebar-border bg-sidebar">
+    <Sidebar side="right" collapsible="offcanvas" className="border-l border-sidebar-border bg-sidebar">
       <SidebarHeader className="bg-sidebar px-4 py-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between">
           <div>

@@ -68,9 +68,9 @@ export function PageHeader({
     <header
       className={`bg-sidebar text-sidebar-foreground border-b border-sidebar-border sticky top-0 z-20 w-full ${className}`}
     >
-      <div className={`px-3 sm:px-4 flex items-center gap-2 ${subtitle ? 'h-16' : 'h-14'}`}>
+      <div dir="rtl" className={`px-3 sm:px-4 flex items-center gap-2 ${subtitle ? 'h-16' : 'h-14'}`}>
 
-        {/* ── Mobile menu trigger — top-right (RTL start) ──────── */}
+        {/* ── Mobile menu trigger — first in RTL flex = physical RIGHT ── */}
         <MenuButton />
 
         {/* ── Back button ──────────────────────────────────────── */}
