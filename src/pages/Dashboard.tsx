@@ -11,11 +11,27 @@ import { StatCard } from '@/components/StatCard';
 import { SkeletonStatCard, SkeletonProjectCard } from '@/components/SkeletonCard';
 import { EmptyState } from '@/components/EmptyState';
 import {
-  Package, Leaf, Building2, TrendingUp, Plus, ScanLine, FileText,
+  Package, Leaf, Building2, TrendingUp, Plus,
   ArrowLeft, Clock, Sparkles, Menu,
 } from 'lucide-react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { summarise, formatKg, formatCO2, type ReportItem } from '@/lib/sustainability';
+
+function DashboardMenuButton() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <button
+      type="button"
+      onClick={toggleSidebar}
+      aria-label="פתח תפריט"
+      className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg
+                 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent
+                 transition-colors flex-shrink-0"
+    >
+      <Menu className="h-5 w-5" />
+    </button>
+  );
+}
 
 interface ProjectMini {
   id: string;
@@ -27,22 +43,6 @@ interface ProjectMini {
   collectedCount: number;
   diverted_kg: number;
   co2_saved_kg: number;
-}
-
-function DashboardMenuButton() {
-  const { toggleSidebar } = useSidebar();
-  return (
-    <button
-      type="button"
-      onClick={toggleSidebar}
-      aria-label="פתח תפריט"
-      className="absolute top-3 right-3 md:hidden flex items-center justify-center h-8 w-8 rounded-lg
-                 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent
-                 transition-colors z-10"
-    >
-      <Menu className="h-5 w-5" />
-    </button>
-  );
 }
 
 export default function Dashboard() {
@@ -134,48 +134,48 @@ export default function Dashboard() {
   return (
     <div dir="rtl" className="w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-6 sm:space-y-8">
       {/* Welcome banner */}
-      <section className="relative overflow-hidden rounded-2xl bg-sidebar text-sidebar-foreground px-5 py-6 sm:px-8 sm:py-8">
-        {/* Subtle decorative — radial glow only, no floating circles */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_0%_100%,_rgba(181,201,173,0.18)_0%,_transparent_70%)] pointer-events-none" />
-        <div className="absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-primary/15 blur-2xl pointer-events-none" />
-
-        <div className="relative z-10">
-          {/* Menu button — top-left of welcome banner, mobile only */}
+      <section className="relative overflow-hidden rounded-2xl bg-sidebar text-sidebar-foreground">
+        {/* Top row: greeting + menu button */}
+        <div dir="ltr" className="flex items-center justify-between px-5 pt-5 sm:px-7 sm:pt-7 pb-1">
           <DashboardMenuButton />
+          <p className="text-sm text-sidebar-foreground/60 font-semibold tracking-wide">
+            {greet}{userName ? `, ${userName.split(' ')[0]}` : ''}
+          </p>
+        </div>
 
-          {/* Greeting row */}
-          <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-[11px] font-bold tracking-[0.18em] uppercase text-sidebar-foreground/50">
-              {greet}
-            </span>
-            {userName && (
-              <span className="text-lg font-extrabold tracking-tight text-sidebar-foreground leading-none">
-                {userName.split(' ')[0]}
-              </span>
-            )}
-          </div>
-
-          {/* Primary headline */}
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-none mb-3">
+        {/* Main content */}
+        <div className="relative z-10 px-5 pb-6 sm:px-7 sm:pb-7">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight mb-1">
             {totals.itemCount > 0 ? (
               <>
-                {formatKg(totals.diverted_kg)}{' '}
-                <span className="text-primary">הוצלו מהטמנה</span>
+                <span className="text-primary">{totals.itemCount}</span>
+                {' פריטים רשומים'}
               </>
             ) : (
               'מוכנים לתעד את הפרויקט הראשון'
             )}
           </h1>
-
-          {/* CO₂ subtitle */}
-          {totals.itemCount > 0 && (
-            <p className="text-sm font-semibold text-sidebar-foreground/65">
-              {formatCO2(totals.co2_saved_kg)} נחסכו
-              <span className="mx-1.5 opacity-40">·</span>
-              על פני {totals.projectCount} {totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}
-            </p>
-          )}
+          <p className="text-sm text-sidebar-foreground/70">
+            {totals.itemCount > 0 ? (
+              <>
+                {totals.collectedCount} נאספו
+                <span className="mx-1.5 opacity-40">·</span>
+                {totals.itemCount - totals.collectedCount} ממתינים
+                {totals.diverted_kg > 0 && (
+                  <>
+                    <span className="mx-1.5 opacity-40">·</span>
+                    {formatKg(totals.diverted_kg)} הוצלו מהטמנה
+                  </>
+                )}
+              </>
+            ) : (
+              `${totals.projectCount} פרויקטים · התחל בתיעוד פריטים`
+            )}
+          </p>
         </div>
+
+        {/* Decorative */}
+        <div className="absolute -left-8 -bottom-8 h-36 w-36 rounded-full bg-accent/20 blur-sm pointer-events-none" />
       </section>
 
       {/* Quick actions */}
