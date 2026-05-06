@@ -56,10 +56,15 @@ export function GuidedWalkthrough({ open, onClose, projectId, apartmentId, apart
   const audioChunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Kick off the conversation when drawer opens
+  // Kick off the conversation when drawer opens — use a hardcoded greeting
+  // so the sheet is interactive instantly instead of waiting for a cold Edge Function start.
   useEffect(() => {
     if (open && messages.length === 0) {
-      void sendToAssistant([], '__start__');
+      setMessages([{
+        role: 'assistant',
+        content: 'שלום! מוכן לסרוק את הדירה יחד.\nבאיזה חדר נתחיל?',
+      }]);
+      setQuickReplies(['סלון', 'חדר שינה', 'מטבח', 'חדר עבודה', 'חדר ילדים', 'חדר רחצה', 'מרפסת', 'אחסון']);
     }
     if (!open) {
       // Reset on close so next open starts fresh
@@ -82,14 +87,8 @@ export function GuidedWalkthrough({ open, onClose, projectId, apartmentId, apart
     setLoading(true);
     setQuickReplies([]);
     try {
-      const outgoing: Msg[] = userText === '__start__'
-        ? [{ role: 'user', content: 'התחל — זהו המסך הפתיחה.' }]
-        : [...historyMessages, { role: 'user', content: userText }];
-
-      // Keep local message log in sync (don't include the hidden __start__ placeholder)
-      if (userText !== '__start__') {
-        setMessages(m => [...m, { role: 'user', content: userText }]);
-      }
+      const outgoing: Msg[] = [...historyMessages, { role: 'user', content: userText }];
+      setMessages(m => [...m, { role: 'user', content: userText }]);
 
       const { data, error } = await supabase.functions.invoke('guided-walkthrough', {
         body: {
@@ -128,7 +127,10 @@ export function GuidedWalkthrough({ open, onClose, projectId, apartmentId, apart
     if (!text.trim() || loading) return;
     const hist = messages.slice();
     setInput('');
-    await sendToAssistant(hist, text.trim());
+    // If only the hardcoded greeting exists (no real turns yet), send without prior
+    // history — the Edge Function system prompt sets the context.
+    const isFirstTurn = hist.length === 1 && hist[0].role === 'assistant';
+    await sendToAssistant(isFirstTurn ? [] : hist, text.trim());
   };
 
   // Voice capture: record → transcribe (parse-voice-items) → send transcription as user message
