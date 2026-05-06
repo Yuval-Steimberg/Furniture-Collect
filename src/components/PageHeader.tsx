@@ -70,6 +70,9 @@ export function PageHeader({
     >
       <div className={`px-3 sm:px-4 flex items-center gap-2 ${subtitle ? 'h-16' : 'h-14'}`}>
 
+        {/* ── Mobile menu trigger — top-right (RTL start) ──────── */}
+        <MenuButton />
+
         {/* ── Back button ──────────────────────────────────────── */}
         {onBack && (
           <>
@@ -106,9 +109,6 @@ export function PageHeader({
             {actions}
           </div>
         )}
-
-        {/* ── Mobile menu trigger (only inside AppLayout) ──────── */}
-        <MenuButton />
 
         {/* ── JAS wordmark ─────────────────────────────────────── */}
         <span

@@ -36,9 +36,9 @@ function DashboardMenuButton() {
       type="button"
       onClick={toggleSidebar}
       aria-label="פתח תפריט"
-      className="absolute top-0 left-0 md:hidden flex items-center justify-center h-8 w-8 rounded-lg
+      className="absolute top-3 right-3 md:hidden flex items-center justify-center h-8 w-8 rounded-lg
                  text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent
-                 transition-colors"
+                 transition-colors z-10"
     >
       <Menu className="h-5 w-5" />
     </button>
