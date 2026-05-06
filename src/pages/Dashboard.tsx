@@ -12,8 +12,9 @@ import { SkeletonStatCard, SkeletonProjectCard } from '@/components/SkeletonCard
 import { EmptyState } from '@/components/EmptyState';
 import {
   Package, Leaf, Building2, TrendingUp, Plus, ScanLine, FileText,
-  ArrowLeft, Clock, Sparkles,
+  ArrowLeft, Clock, Sparkles, Menu,
 } from 'lucide-react';
+import { useSidebar } from '@/components/ui/sidebar';
 import { summarise, formatKg, formatCO2, type ReportItem } from '@/lib/sustainability';
 
 interface ProjectMini {
@@ -26,6 +27,22 @@ interface ProjectMini {
   collectedCount: number;
   diverted_kg: number;
   co2_saved_kg: number;
+}
+
+function DashboardMenuButton() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <button
+      type="button"
+      onClick={toggleSidebar}
+      aria-label="פתח תפריט"
+      className="absolute top-0 left-0 md:hidden flex items-center justify-center h-8 w-8 rounded-lg
+                 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent
+                 transition-colors"
+    >
+      <Menu className="h-5 w-5" />
+    </button>
+  );
 }
 
 export default function Dashboard() {
@@ -123,6 +140,9 @@ export default function Dashboard() {
         <div className="absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-primary/15 blur-2xl pointer-events-none" />
 
         <div className="relative z-10">
+          {/* Menu button — top-left of welcome banner, mobile only */}
+          <DashboardMenuButton />
+
           {/* Greeting row */}
           <div className="flex items-baseline gap-2 mb-3">
             <span className="text-[11px] font-bold tracking-[0.18em] uppercase text-sidebar-foreground/50">

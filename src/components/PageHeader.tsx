@@ -1,6 +1,9 @@
 /**
  * PageHeader — Shared header component for all inner pages.
  *
+ * When rendered inside AppLayout, it auto-shows a hamburger menu button
+ * (mobile only) that opens the sidebar panel.
+ *
  * Design tokens:
  *  bg-sidebar / text-sidebar-foreground  →  forest #333D36 / cream #FFFCF5
  *  font-extrabold tracking-tight         →  Heebo 800
@@ -8,7 +11,33 @@
  */
 
 import type { ReactNode } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Menu } from 'lucide-react';
+import { useInAppLayout } from '@/components/AppLayout';
+import { useSidebar } from '@/components/ui/sidebar';
+
+/** Inner — useSidebar is always called, but only rendered when inside SidebarProvider. */
+function MenuButtonInner() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <button
+      type="button"
+      onClick={toggleSidebar}
+      aria-label="פתח תפריט"
+      className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-lg
+                 text-sidebar-foreground/70 hover:text-sidebar-foreground
+                 hover:bg-sidebar-accent transition-colors md:hidden"
+    >
+      <Menu className="h-5 w-5" />
+    </button>
+  );
+}
+
+/** Safe wrapper — only mounts the inner component when inside AppLayout/SidebarProvider. */
+function MenuButton() {
+  const inLayout = useInAppLayout();
+  if (!inLayout) return null;
+  return <MenuButtonInner />;
+}
 
 interface PageHeaderProps {
   /** Main page title (Hebrew or English). */
@@ -77,6 +106,9 @@ export function PageHeader({
             {actions}
           </div>
         )}
+
+        {/* ── Mobile menu trigger (only inside AppLayout) ──────── */}
+        <MenuButton />
 
         {/* ── JAS wordmark ─────────────────────────────────────── */}
         <span
