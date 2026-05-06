@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonStatCard, SkeletonProjectCard } from '@/components/SkeletonCard';
+import { PageHeader } from '@/components/PageHeader';
 
 interface UserWithProjects {
   id: string;
@@ -363,9 +364,13 @@ export default function UserManagement() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-muted p-4 sm:p-6" dir="rtl">
-        <div className="max-w-6xl mx-auto space-y-4">
-          <div className="h-10 w-48 bg-muted-foreground/10 rounded animate-pulse" />
+      <div className="min-h-screen bg-muted" dir="rtl">
+        <PageHeader
+          title="ניהול משתמשים"
+          subtitle="ניהול ארגון"
+          actions={<SidebarTrigger />}
+        />
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard />
           </div>
@@ -381,22 +386,21 @@ export default function UserManagement() {
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      {/* Forest hero header */}
-      <header className="bg-sidebar text-sidebar-foreground shadow-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
-            <Users className="h-5 w-5" strokeWidth={1.75} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs uppercase tracking-wider text-sidebar-foreground/70">ניהול ארגון</div>
-            <h1 className="text-lg sm:text-xl font-bold">ניהול משתמשים</h1>
-          </div>
-          <Button onClick={() => setInviteDialog(true)} size="sm" variant="outline" className="bg-transparent border-sidebar-foreground/30 text-sidebar-foreground hover:bg-sidebar-accent gap-2">
+      <PageHeader
+        title="ניהול משתמשים"
+        subtitle={`${users.length} משתמשים · ${roleCounts.ORG_ADMIN ?? 0} מנהלי ארגון`}
+        actions={
+          <Button
+            onClick={() => setInviteDialog(true)}
+            size="sm"
+            variant="ghost"
+            className="text-sidebar-foreground hover:bg-sidebar-accent gap-1.5 px-2.5"
+          >
             <UserPlus className="h-4 w-4" />
-            <span className="hidden sm:inline">הזמן משתמש</span>
+            <span className="hidden sm:inline text-sm font-semibold">הזמן משתמש</span>
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
 
