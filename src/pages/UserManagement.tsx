@@ -368,7 +368,6 @@ export default function UserManagement() {
         <PageHeader
           title="ניהול משתמשים"
           subtitle="ניהול ארגון"
-          actions={<SidebarTrigger />}
         />
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
