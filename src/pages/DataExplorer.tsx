@@ -45,6 +45,7 @@ import {
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { PageHeader } from '@/components/PageHeader';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
 
@@ -297,20 +298,32 @@ export default function DataExplorer() {
     dateTo !== '',
   ].filter(Boolean).length;
 
+  // Mobile: collapse advanced filters by default
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  const advancedFiltersCount = [
+    selectedBuilding !== 'all',
+    selectedCategory !== 'all',
+    selectedCollector !== 'all',
+    dateFrom !== '',
+    dateTo !== '',
+  ].filter(Boolean).length;
+
   return (
-    <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-card border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Search className="h-6 w-6 text-primary" />
-              <h1 className="text-xl md:text-2xl font-bold">חוקר נתונים</h1>
-            </div>
+    <div className="min-h-screen bg-muted w-full overflow-x-hidden" dir="rtl">
+
+      <PageHeader
+        title="חוקר נתונים"
+        subtitle={`${filteredItems.length} תוצאות${activeFiltersCount > 0 ? ` · ${activeFiltersCount} סינונים פעילים` : ''}`}
+        actions={
+          <div className="flex items-center gap-1.5">
+            {activeFiltersCount > 0 && (
+              <Badge variant="secondary" className="flex-shrink-0">{activeFiltersCount}</Badge>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
+                <Button variant="ghost" size="sm" className="gap-1.5 text-sidebar-foreground hover:bg-sidebar-accent">
                   <Download className="h-4 w-4" />
-                  ייצוא
                   <ChevronDown className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
@@ -329,81 +342,30 @@ export default function DataExplorer() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
-      </header>
+        }
+      />
 
-      <main className="container mx-auto px-4 py-4 space-y-4">
-        {/* Filters Card */}
+      <main className="px-3 sm:px-4 py-3 sm:py-4 space-y-3">
+
+        {/* ── Filters ─────────────────────────────────────────────── */}
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Filter className="h-5 w-5" />
-                סינון
-                {activeFiltersCount > 0 && (
-                  <Badge variant="secondary">{activeFiltersCount}</Badge>
-                )}
-              </CardTitle>
-              {activeFiltersCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  נקה הכל
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="space-y-1.5">
+          <CardContent className="p-3 space-y-3">
+            {/* Primary row: Project + Status (always visible) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
                 <Label className="text-xs">פרויקט</Label>
-                <Select value={selectedProject} onValueChange={setSelectedProject}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="הכל" />
-                  </SelectTrigger>
+                <Select value={selectedProject} onValueChange={v => { setSelectedProject(v); setPage(1); }}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="הכל" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">הכל</SelectItem>
-                    {projects.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
+                    {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">בניין</Label>
-                <Select value={selectedBuilding} onValueChange={setSelectedBuilding} disabled={selectedProject === 'all'}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="הכל" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">הכל</SelectItem>
-                    {buildings.map(b => (
-                      <SelectItem key={b} value={b}>בניין {b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">קטגוריה</Label>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="הכל" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">הכל</SelectItem>
-                    {Object.entries(CATEGORY_TRANSLATIONS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs">סטטוס</Label>
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="הכל" />
-                  </SelectTrigger>
+                <Select value={selectedStatus} onValueChange={v => { setSelectedStatus(v); setPage(1); }}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="הכל" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">הכל</SelectItem>
                     <SelectItem value="collected">נאסף</SelectItem>
@@ -411,73 +373,102 @@ export default function DataExplorer() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">אוסף</Label>
-                <Select value={selectedCollector} onValueChange={setSelectedCollector}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="הכל" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">הכל</SelectItem>
-                    {collectors.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">חיפוש</Label>
-                <Input
-                  className="h-9"
-                  placeholder="חפש פריט..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">מתאריך</Label>
-                <Input
-                  type="date"
-                  className="h-9"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">עד תאריך</Label>
-                <Input
-                  type="date"
-                  className="h-9"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
-              </div>
             </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute top-1/2 -translate-y-1/2 right-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                className="h-9 pr-9"
+                placeholder="חפש פריט לפי שם..."
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
+                dir="rtl"
+              />
+            </div>
+
+            {/* Advanced filters toggle */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilters(v => !v)}
+                className="text-sm text-primary flex items-center gap-1 hover:underline"
+              >
+                <Filter className="h-3.5 w-3.5" />
+                {showAdvancedFilters ? 'הסתר סינון מתקדם' : 'סינון מתקדם'}
+                {advancedFiltersCount > 0 && (
+                  <Badge variant="secondary" className="h-4 min-w-4 text-[10px] px-1">{advancedFiltersCount}</Badge>
+                )}
+              </button>
+              {activeFiltersCount > 0 && (
+                <button type="button" onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground">
+                  נקה הכל
+                </button>
+              )}
+            </div>
+
+            {/* Advanced filters — collapsible */}
+            {showAdvancedFilters && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t">
+                <div className="space-y-1">
+                  <Label className="text-xs">בניין</Label>
+                  <Select value={selectedBuilding} onValueChange={v => { setSelectedBuilding(v); setPage(1); }} disabled={selectedProject === 'all'}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="הכל" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">הכל</SelectItem>
+                      {buildings.map(b => <SelectItem key={b} value={b}>בניין {b}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">קטגוריה</Label>
+                  <Select value={selectedCategory} onValueChange={v => { setSelectedCategory(v); setPage(1); }}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="הכל" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">הכל</SelectItem>
+                      {Object.entries(CATEGORY_TRANSLATIONS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">אוסף</Label>
+                  <Select value={selectedCollector} onValueChange={v => { setSelectedCollector(v); setPage(1); }}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="הכל" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">הכל</SelectItem>
+                      {collectors.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 col-span-1">
+                  <Label className="text-xs">מתאריך</Label>
+                  <Input type="date" className="h-9" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
+                </div>
+                <div className="space-y-1 col-span-1">
+                  <Label className="text-xs">עד תאריך</Label>
+                  <Input type="date" className="h-9" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Grouping & Chart Builder */}
+        {/* ── Grouping & Chart ─────────────────────────────────────── */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Layers className="h-5 w-5" />
+          <CardHeader className="pb-2 pt-3 px-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Layers className="h-4 w-4" />
               קיבוץ וגרפים
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
+          <CardContent className="px-3 pb-3">
+            <div className="grid grid-cols-3 gap-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs">קבץ לפי</Label>
-                <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupByOption)}>
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>
+                  <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">ללא קיבוץ</SelectItem>
+                    <SelectItem value="none">ללא</SelectItem>
                     <SelectItem value="category">קטגוריה</SelectItem>
                     <SelectItem value="collector">אוסף</SelectItem>
                     <SelectItem value="building">בניין</SelectItem>
@@ -486,27 +477,21 @@ export default function DataExplorer() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs">מדד</Label>
-                <Select value={metric} onValueChange={(v) => setMetric(v as MetricOption)}>
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={metric} onValueChange={v => setMetric(v as MetricOption)}>
+                  <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="count">כמות</SelectItem>
-                    <SelectItem value="weight">משקל (ק"ג)</SelectItem>
-                    <SelectItem value="value">ערך (₪)</SelectItem>
+                    <SelectItem value="weight">משקל</SelectItem>
+                    <SelectItem value="value">ערך</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">סוג גרף</Label>
-                <Select value={chartType} onValueChange={(v) => setChartType(v as ChartType)}>
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
+              <div className="space-y-1">
+                <Label className="text-xs">גרף</Label>
+                <Select value={chartType} onValueChange={v => setChartType(v as ChartType)}>
+                  <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">ללא</SelectItem>
                     <SelectItem value="bar">עמודות</SelectItem>
@@ -516,57 +501,39 @@ export default function DataExplorer() {
               </div>
             </div>
 
-            {/* Chart Display */}
             {groupBy !== 'none' && chartType !== 'none' && groupedData.length > 0 && (
-              <div className="mt-4">
+              <div className="mt-3">
                 {chartType === 'bar' ? (
-                  <div style={{ height: Math.max(240, Math.min(10, groupedData.length) * 40 + 30) }}>
+                  <div style={{ height: Math.max(200, Math.min(10, groupedData.length) * 36 + 30) }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={groupedData.slice(0, 10)} layout="vertical" margin={{ top: 4, right: 60, left: 16, bottom: 4 }}>
+                      <BarChart data={groupedData.slice(0, 10)} layout="vertical" margin={{ top: 4, right: 50, left: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.4} />
-                        <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                        <XAxis type="number" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 12 }} />
-                        <Bar dataKey={metric} radius={[0, 5, 5, 0]} barSize={22}>
-                          {groupedData.slice(0, 10).map((_, index) => (
-                            <Cell key={`bar-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
+                        <Bar dataKey={metric} radius={[0, 5, 5, 0]} barSize={20}>
+                          {groupedData.slice(0, 10).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 ) : (
                   <div>
-                    <ResponsiveContainer width="100%" height={220}>
+                    <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
-                        <Pie
-                          data={groupedData.slice(0, 8)}
-                          dataKey={metric}
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={90}
-                          innerRadius={45}
-                          paddingAngle={2}
-                          strokeWidth={0}
-                        >
-                          {groupedData.slice(0, 8).map((_, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
+                        <Pie data={groupedData.slice(0, 8)} dataKey={metric} nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40} paddingAngle={2} strokeWidth={0}>
+                          {groupedData.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
                         <Tooltip contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 12 }} />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2 px-2">
+                    <div className="flex flex-wrap justify-center gap-x-3 gap-y-1.5 mt-2">
                       {(() => {
                         const total = groupedData.slice(0, 8).reduce((s, d) => s + (d[metric] || 0), 0);
-                        return groupedData.slice(0, 8).map((d, index) => (
-                          <div key={d.name} className="flex items-center gap-1.5">
-                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                            <span className="text-sm font-medium">{d.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({total > 0 ? ((d[metric] / total) * 100).toFixed(0) : 0}%)
-                            </span>
+                        return groupedData.slice(0, 8).map((d, i) => (
+                          <div key={d.name} className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                            <span className="text-xs">{d.name} ({total > 0 ? ((d[metric] / total) * 100).toFixed(0) : 0}%)</span>
                           </div>
                         ));
                       })()}
@@ -578,110 +545,118 @@ export default function DataExplorer() {
           </CardContent>
         </Card>
 
-        {/* Results Summary */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm text-muted-foreground">
-          <span className="font-medium">נמצאו {filteredItems.length} פריטים</span>
-          <span className="text-xs sm:text-sm">
-            {filteredItems.reduce((sum, i) => sum + i.quantity, 0)} יחידות ·{' '}
-            {filteredItems.reduce((sum, i) => sum + (i.estimated_weight_kg || 0) * i.quantity, 0).toFixed(1)} ק"ג ·{' '}
-            ₪{filteredItems.reduce((sum, i) => sum + (i.estimated_resale_ils || 0) * i.quantity, 0).toLocaleString()}
+        {/* ── Results summary ──────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-sm">
+          <span className="font-medium text-foreground">{filteredItems.length} פריטים</span>
+          <span className="text-xs text-muted-foreground">
+            {filteredItems.reduce((s, i) => s + i.quantity, 0)} יח' ·{' '}
+            {filteredItems.reduce((s, i) => s + (i.estimated_weight_kg || 0) * i.quantity, 0).toFixed(1)} ק"ג ·{' '}
+            ₪{filteredItems.reduce((s, i) => s + (i.estimated_resale_ils || 0) * i.quantity, 0).toLocaleString()}
           </span>
         </div>
 
-        {/* Data Table */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto -mx-px">
-              <Table className="min-w-[640px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="cursor-pointer" onClick={() => handleSort('description')}>
-                      <div className="flex items-center gap-1">
-                        תיאור
-                        <ArrowUpDown className="h-3 w-3" />
-                      </div>
-                    </TableHead>
-                    <TableHead>קטגוריה</TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => handleSort('quantity')}>
-                      <div className="flex items-center gap-1">
-                        כמות
-                        <ArrowUpDown className="h-3 w-3" />
-                      </div>
-                    </TableHead>
-                    <TableHead>סטטוס</TableHead>
-                    <TableHead>אוסף</TableHead>
-                    <TableHead>פרויקט</TableHead>
-                    <TableHead>דירה</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        טוען...
-                      </TableCell>
-                    </TableRow>
-                  ) : paginatedItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        לא נמצאו פריטים
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    paginatedItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.description}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
+        {/* ── Item cards (mobile) ──────────────────────────────────── */}
+        {loading ? (
+          <div className="text-center py-8 text-muted-foreground">טוען...</div>
+        ) : paginatedItems.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">לא נמצאו פריטים</div>
+        ) : (
+          <>
+            {/* Mobile card view */}
+            <div className="sm:hidden space-y-2">
+              {paginatedItems.map(item => (
+                <Card key={item.id}>
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm leading-snug">{item.description}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {item.projects?.name}{item.apartments && ` · בניין ${item.apartments.building_number}/${item.apartments.apartment_number}`}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          <Badge variant="outline" className="text-[10px] h-4 px-1">
                             {CATEGORY_TRANSLATIONS[item.material_category] || item.material_category}
                           </Badge>
-                        </TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>
-                          <Badge variant={item.collected ? 'default' : 'secondary'}>
+                          <Badge variant={item.collected ? 'default' : 'secondary'} className="text-[10px] h-4 px-1">
                             {item.collected ? 'נאסף' : 'ממתין'}
                           </Badge>
-                        </TableCell>
-                        <TableCell>{(item as any).collected_by || '-'}</TableCell>
-                        <TableCell>{item.projects?.name}</TableCell>
-                        <TableCell>
-                          {item.apartments?.building_number}/{item.apartments?.apartment_number}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                          {(item as any).collected_by && (
+                            <span className="text-[10px] text-muted-foreground">
+                              ע"י {(item as any).collected_by}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-center">
+                        <p className="text-lg font-bold leading-none">{item.quantity}</p>
+                        <p className="text-[10px] text-muted-foreground">יח'</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
+
+            {/* Desktop table view */}
+            <Card className="hidden sm:block">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[640px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="cursor-pointer" onClick={() => handleSort('description')}>
+                          <div className="flex items-center gap-1">תיאור <ArrowUpDown className="h-3 w-3" /></div>
+                        </TableHead>
+                        <TableHead>קטגוריה</TableHead>
+                        <TableHead className="cursor-pointer" onClick={() => handleSort('quantity')}>
+                          <div className="flex items-center gap-1">כמות <ArrowUpDown className="h-3 w-3" /></div>
+                        </TableHead>
+                        <TableHead>סטטוס</TableHead>
+                        <TableHead>אוסף</TableHead>
+                        <TableHead>פרויקט</TableHead>
+                        <TableHead>דירה</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedItems.map(item => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.description}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{CATEGORY_TRANSLATIONS[item.material_category] || item.material_category}</Badge>
+                          </TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>
+                            <Badge variant={item.collected ? 'default' : 'secondary'}>
+                              {item.collected ? 'נאסף' : 'ממתין'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{(item as any).collected_by || '-'}</TableCell>
+                          <TableCell>{item.projects?.name}</TableCell>
+                          <TableCell>{item.apartments?.building_number}/{item.apartments?.apartment_number}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <span className="text-sm text-muted-foreground">
-                  עמוד {page} מתוך {totalPages}
-                </span>
+              <div className="flex items-center justify-between px-1 py-1">
+                <span className="text-sm text-muted-foreground">עמוד {page} / {totalPages}</span>
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </>
+        )}
       </main>
     </div>
   );

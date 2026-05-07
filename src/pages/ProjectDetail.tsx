@@ -6,9 +6,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package, Search, ChevronsDownUp, ChevronsUpDown, X } from 'lucide-react';
+import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package, Search, ChevronsDownUp, ChevronsUpDown, X, ClipboardList } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonProjectCard } from '@/components/SkeletonCard';
+import { PageHeader } from '@/components/PageHeader';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -202,27 +203,24 @@ export default function ProjectDetail() {
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-sidebar text-sidebar-foreground shadow-md">
-        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/projects')} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0">
-              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+      <PageHeader
+        title={project.name}
+        subtitle={`${project.city} · ${project.developer_name}`}
+        onBack={() => navigate('/projects')}
+        actions={
+          <>
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/users`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8" title="ניהול משתמשים">
+              <Users className="h-4 w-4" />
             </Button>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold truncate">{project.name}</h1>
-              <p className="text-xs sm:text-sm text-primary-foreground/80 truncate">{project.city} • {project.developer_name}</p>
-            </div>
-            <div className="flex gap-1 sm:gap-2 flex-shrink-0">
-              <Button variant="secondary" size="icon" onClick={() => navigate(`/projects/${projectId}/users`)} className="h-9 w-9 sm:h-10 sm:w-10">
-                <Users className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-              <Button variant="secondary" size="icon" onClick={() => navigate(`/projects/${projectId}/statistics`)} className="h-9 w-9 sm:h-10 sm:w-10">
-                <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/preparation`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8" title="תכנון איסוף">
+              <ClipboardList className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/statistics`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8" title="סטטיסטיקות">
+              <BarChart3 className="h-4 w-4" />
+            </Button>
+          </>
+        }
+      />
 
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {/* Summary stats */}
@@ -242,6 +240,21 @@ export default function ProjectDetail() {
             </div>
           </div>
         )}
+
+        {/* Preparation / planning shortcut — prominent for managers */}
+        <button
+          onClick={() => navigate(`/projects/${projectId}/preparation`)}
+          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors px-4 py-3 text-right"
+        >
+          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+            <ClipboardList className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm text-foreground">תכנון איסוף</p>
+            <p className="text-[11px] text-muted-foreground">סקירה כללית לתכנון עבודת הפירוק — פריטים, חומרים ומשקלות</p>
+          </div>
+          <ArrowLeft className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        </button>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-lg sm:text-xl font-bold">בניינים ודירות</h2>

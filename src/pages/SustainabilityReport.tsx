@@ -11,7 +11,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Printer, Download } from 'lucide-react';
+import { Printer } from 'lucide-react';
+import { PageHeader } from '@/components/PageHeader';
 import {
   MATERIAL_CO2_KG_PER_KG, MATERIAL_HE, formatKg, formatCO2, summarise,
   type ReportApartment, type ReportItem, type ReportProject, type MaterialCategory,
@@ -75,22 +76,18 @@ export default function SustainabilityReport() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-background text-foreground">
-      {/* Non-print action bar */}
-      <div className="print:hidden sticky top-0 z-20 bg-sidebar text-sidebar-foreground shadow-md">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-sidebar-foreground/70 truncate">{project.name}</p>
-            <h1 className="text-base sm:text-lg font-bold truncate">דוח קיימות</h1>
-          </div>
-          <Button onClick={() => window.print()} className="gap-2" size="sm">
+      <PageHeader
+        className="print:hidden"
+        title="דוח קיימות"
+        subtitle={project.name}
+        onBack={() => navigate(-1)}
+        actions={
+          <Button onClick={() => window.print()} className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" size="sm">
             <Printer className="h-4 w-4" />
-            <span>הדפס / PDF</span>
+            <span className="hidden sm:inline">הדפס / PDF</span>
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Printable document */}
       <main className="max-w-5xl mx-auto px-6 sm:px-10 py-10 print:p-0 print:max-w-none">

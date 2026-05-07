@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/exportUtils';
 import { generateExecutiveReport } from '@/lib/executiveReportPDF';
+import { PageHeader } from '@/components/PageHeader';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899'];
 
@@ -297,15 +298,29 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
 
   return (
     <div className="min-h-screen bg-muted" dir="rtl">
-      <header className="bg-card border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl md:text-2xl font-bold">סטטיסטיקות כלליות</h1>
+      <PageHeader
+        title="סטטיסטיקות כלליות"
+        subtitle={stats ? `${stats.totalItems} פריטים · ${stats.collected} נאספו · ${collectedPercentage}% שיעור איסוף` : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleExportExecutive}
+              disabled={!!exporting || !stats?.items}
+              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+              size="sm"
+            >
+              {exporting === 'executive' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileBarChart className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Executive Report</span>
+              <span className="sm:hidden">Report</span>
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2" disabled={!!exporting}>
-                  {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  ייצוא
+                <Button variant="ghost" size="sm" className="gap-1.5 text-sidebar-foreground hover:bg-sidebar-accent" disabled={!!exporting}>
+                  {exporting && exporting !== 'executive' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                   <ChevronDown className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
@@ -321,15 +336,11 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                 <DropdownMenuItem onClick={handleExportPDF} disabled={!!exporting} className="gap-2">
                   <FileText className="h-4 w-4" /> PDF — סיכום
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleExportExecutive} disabled={!!exporting} className="gap-2 text-primary font-semibold">
-                  <FileBarChart className="h-4 w-4" /> דוח מנהלים מקצועי
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <main className="container mx-auto px-4 py-4 md:py-6 space-y-4 md:space-y-6">
         {/* Filters */}
@@ -575,17 +586,17 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className={categoryViewMode === 'bar' ? 'p-0' : undefined}>
             {categoryViewMode === 'list' && (
               <div className="space-y-2">
                 {stats?.materialChartData?.map((item: any, index: number) => (
-                  <div 
-                    key={item.name} 
+                  <div
+                    key={item.name}
                     className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div 
-                        className="w-3 h-3 rounded-full flex-shrink-0" 
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: COLORS[index % COLORS.length] }}
                       />
                       <span className="font-medium">{item.name}</span>
@@ -601,16 +612,17 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                 ))}
               </div>
             )}
-            
+
             {categoryViewMode === 'bar' && (
+              <div className="flex items-center justify-center w-full px-2 py-4">
               <ResponsiveContainer
                 width="100%"
-                height={Math.max(260, (stats?.materialChartData?.length || 0) * 44 + 40)}
+                height={(stats?.materialChartData?.length || 0) * 60 + 40}
               >
                 <BarChart
                   data={stats?.materialChartData || []}
                   layout="vertical"
-                  margin={{ top: 4, right: 90, left: 16, bottom: 4 }}
+                  margin={{ top: 4, right: 110, left: 8, bottom: 4 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} opacity={0.4} />
                   <XAxis
@@ -623,9 +635,9 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                     dataKey="name"
                     type="category"
                     orientation="right"
-                    width={82}
+                    width={100}
                     tick={{ fontSize: 12, fill: '#374151' }}
-                    tickMargin={6}
+                    tickMargin={8}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -637,13 +649,14 @@ ${stats.materialChartData?.map((c: any) => `- ${c.name}: ${c.count} פריטים
                     contentStyle={{ textAlign: 'right', direction: 'rtl', fontSize: 13 }}
                     cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                   />
-                  <Bar dataKey="count" radius={[0, 5, 5, 0]} barSize={22} maxBarSize={30}>
+                  <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={30} maxBarSize={38}>
                     {stats?.materialChartData?.map((_: any, index: number) => (
                       <Cell key={`bar-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             )}
 
             {categoryViewMode === 'pie' && (

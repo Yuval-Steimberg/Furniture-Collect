@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
+import { PageHeader } from '@/components/PageHeader';
 import { Lightbox } from '@/components/Lightbox';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonItemRow } from '@/components/SkeletonCard';
@@ -114,6 +115,8 @@ export default function ApartmentDetail() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const itemPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const roomInputRef = useRef<HTMLInputElement | null>(null);
+  const multiUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const continueInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
   const [roomScanning, setRoomScanning] = useState(false);
   const [photoingItemId, setPhotoingItemId] = useState<string | null>(null);
@@ -149,6 +152,10 @@ export default function ApartmentDetail() {
   // Bulk collect attribution
   const [showBulkCollectDialog, setShowBulkCollectDialog] = useState(false);
   const [bulkCollectorInput, setBulkCollectorInput] = useState('');
+
+  // Multi-photo gallery upload (creates new items)
+  const [multiUploading, setMultiUploading] = useState(false);
+  const [multiUploadProgress, setMultiUploadProgress] = useState<{ current: number; total: number } | null>(null);
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -487,10 +494,10 @@ export default function ApartmentDetail() {
     openCameraPicker();
   };
 
-  // Continue capturing in multi-photo mode
-  const continueCapturing = () => {
+  // Continue capturing — triggered by the label/input inside the dialog (trusted event)
+  const handleContinueCapture = (e: ChangeEvent<HTMLInputElement>) => {
     setShowContinueCaptureDialog(false);
-    openCameraPicker();
+    handleImageCapture(e);
   };
 
   // End multi-photo capture session
@@ -503,6 +510,84 @@ export default function ApartmentDetail() {
       toast.success(`${count} תמונות נוספו בהצלחה`);
     }
   };
+
+  // ---- Multi-gallery upload (select many photos → each creates a new item via AI) ----
+  const openMultiUploadPicker = () => {
+    if (scanning || processing || recording || multiUploading || roomScanning) return;
+    multiUploadInputRef.current?.click();
+  };
+
+  const handleMultiUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+    if (e.target) e.target.value = '';
+    if (files.length === 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setMultiUploading(true);
+    setMultiUploadProgress({ current: 0, total: files.length });
+    const newIds: string[] = [];
+    let successCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      setMultiUploadProgress({ current: i + 1, total: files.length });
+      try {
+        const compressed = await compressImageToJpeg(files[i], 1024, 0.78);
+        const base64 = await blobToBase64(compressed);
+        const { data: parseData, error: parseError } = await supabase.functions.invoke('parse-image-item', {
+          body: { image_base64: base64, apartment_id: apartmentId },
+        });
+        if (parseError) throw parseError;
+        const parsed = parseData?.item;
+        if (!parsed?.description) throw new Error('AI לא זיהה פריט');
+
+        const photoUuid = crypto.randomUUID();
+        const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('item-photos')
+          .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
+
+        const { data: insertedRows, error: insertError } = await supabase.from('items').insert({
+          project_id: projectId,
+          apartment_id: apartmentId,
+          description: parsed.description,
+          quantity: parsed.quantity ?? 1,
+          location: parsed.location || null,
+          intended_for_collection: parsed.intended_for_collection !== false,
+          item_type: parsed.item_type as any,
+          material_category: parsed.material_category as any,
+          estimated_weight_kg: parsed.estimated_weight_kg ?? null,
+          condition: parsed.condition as any,
+          ai_confidence: parsed.ai_confidence ?? null,
+          source: 'image' as any,
+          image_url: publicUrl.publicUrl,
+          created_by_user_id: user.id,
+        } as any).select('id');
+        if (insertError) throw insertError;
+        (insertedRows ?? []).forEach((r: any) => newIds.push(r.id));
+        successCount++;
+      } catch (err: any) {
+        console.error(`multi-upload image ${i + 1} failed:`, err);
+        toast.error(`שגיאה בתמונה ${i + 1}: ${err?.message ?? 'שגיאה'}`);
+      }
+    }
+
+    setMultiUploading(false);
+    setMultiUploadProgress(null);
+
+    if (newIds.length > 0) {
+      pushUndo(newIds);
+      void runDuplicateCheck(newIds);
+      await loadData();
+    }
+    if (successCount > 0) {
+      toast.success(`${successCount} פריטים נוספו מ-${files.length} תמונות`);
+    }
+  };
+
   // ---- Room sweep (multi-item vision) ---------------------------------
   const openRoomPicker = () => {
     if (scanning || roomScanning || processing || recording) return;
@@ -752,35 +837,37 @@ export default function ApartmentDetail() {
     itemPhotoInputRef.current?.click();
   };
   const attachPhotoToItem = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
     const itemId = photoingItemId;
     if (e.target) e.target.value = '';
     setPhotoingItemId(null);
-    if (!file || !itemId) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('יש לבחור קובץ תמונה');
-      return;
-    }
+    if (files.length === 0 || !itemId) return;
     try {
-      const compressed = await compressImageToJpeg(file, 1600, 0.8);
-      const photoUuid = crypto.randomUUID();
-      const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from('item-photos')
-        .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
-      if (uploadError) throw uploadError;
-      const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
       const currentItem = items.find(i => i.id === itemId);
       const existingUrls: string[] = currentItem?.photo_urls?.length
         ? currentItem.photo_urls
         : currentItem?.image_url ? [currentItem.image_url] : [];
-      const newUrls = [...existingUrls, publicUrl.publicUrl];
+
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        const compressed = await compressImageToJpeg(file, 1600, 0.8);
+        const photoUuid = crypto.randomUUID();
+        const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('item-photos')
+          .upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: publicUrl } = supabase.storage.from('item-photos').getPublicUrl(path);
+        uploadedUrls.push(publicUrl.publicUrl);
+      }
+
+      const allUrls = [...existingUrls, ...uploadedUrls];
       const { error: updateError } = await supabase
         .from('items')
-        .update({ photo_urls: newUrls, image_url: newUrls[0] } as any)
+        .update({ photo_urls: allUrls, image_url: allUrls[0] } as any)
         .eq('id', itemId);
       if (updateError) throw updateError;
-      toast.success(newUrls.length > 1 ? `${newUrls.length} תמונות לפריט` : 'תמונה צורפה לפריט');
+      toast.success(uploadedUrls.length > 1 ? `${uploadedUrls.length} תמונות צורפו לפריט` : 'תמונה צורפה לפריט');
       await loadData();
     } catch (err: any) {
       console.error('attach photo failed:', err);
@@ -990,35 +1077,26 @@ export default function ApartmentDetail() {
     return <div className="min-h-screen flex items-center justify-center">טוען...</div>;
   }
   return <div className="min-h-screen bg-muted pb-24 w-screen overflow-x-hidden" dir="rtl">
-      <header className="bg-sidebar text-sidebar-foreground shadow-md sticky top-0 z-10 w-screen">
-        <div className="px-3 sm:px-4 py-3 sm:py-4 w-full">
-          <div className="flex items-center gap-2 sm:gap-4 w-full">
-            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0">
-              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+      <PageHeader
+        title={`בניין ${apartmentInfo?.building_number} · דירה ${apartmentInfo?.apartment_number}`}
+        subtitle={apartmentInfo?.projects?.name}
+        onBack={() => navigate(`/projects/${projectId}`)}
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setBulkMode(v => !v)}
+              className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8"
+              title={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
+              aria-label={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
+            >
+              <Check className={`h-4 w-4 ${bulkMode ? 'text-primary' : ''}`} />
             </Button>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs sm:text-sm text-primary-foreground/80 truncate">{apartmentInfo?.projects?.name}</p>
-              <h1 className="text-base sm:text-lg font-bold truncate">
-                בניין {apartmentInfo?.building_number} · דירה {apartmentInfo?.apartment_number}
-              </h1>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setBulkMode(v => !v)}
-                className="text-sidebar-foreground hover:bg-sidebar-accent h-9 w-9"
-                title={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
-                aria-label={bulkMode ? 'יציאה ממצב בחירה' : 'מצב בחירה מרובה'}
-              >
-                <Check className={`h-4 w-4 ${bulkMode ? 'text-primary' : ''}`} />
-              </Button>
-              {getStatusBadge(apartmentInfo?.status)}
-            </div>
-          </div>
-        </div>
-        {/* Thin progress strip at bottom of header — updates live as items are collected */}
-        {!loading && (() => {
+            {getStatusBadge(apartmentInfo?.status)}
+          </>
+        }
+        bottomSlot={!loading && (() => {
           const forCollection = items.filter(i => i.intended_for_collection && i.status !== 'discarded');
           const collectedCount = forCollection.filter(i => i.collected).length;
           const pct = forCollection.length > 0 ? (collectedCount / forCollection.length) * 100 : 0;
@@ -1032,7 +1110,7 @@ export default function ApartmentDetail() {
             </div>
           );
         })()}
-      </header>
+      />
 
       <main className="px-3 sm:px-4 py-4 sm:py-6 w-full">
         {/* Smart search — natural language filter over items */}
@@ -1359,101 +1437,119 @@ export default function ApartmentDetail() {
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-background border-t shadow-lg">
-        <div className="flex gap-2 w-full">
-          <Button onClick={toggleRecording} size="lg" className="flex-1 gap-2 h-12 sm:h-14 text-base sm:text-lg relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
+      <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg">
+        {/* Row 1 — Primary voice action (full width) */}
+        <div className="px-2 pt-2 pb-1.5">
+          <Button onClick={toggleRecording} size="lg" className="w-full gap-2 h-12 text-base relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
             {processing ? <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current"></div>
                 <span>מעבד נתונים...</span>
               </> : recording ? <>
-                <Mic className="h-5 w-5 sm:h-6 sm:w-6 animate-pulse" />
+                <Mic className="h-5 w-5 animate-pulse" />
                 <span>עצור הקלטה</span>
               </> : <>
-                <Mic className="h-5 w-5 sm:h-6 sm:w-6" />
+                <Mic className="h-5 w-5" />
                 <span>הקלט פריטים</span>
               </>}
           </Button>
+        </div>
+        {/* Row 2 — Secondary actions: horizontally scrollable so all are reachable */}
+        <div className="flex gap-1.5 overflow-x-auto px-2 pb-2 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+          {/* ── צלם — single-shot: takes ONE photo → AI creates one item ── */}
           <Button
             onClick={openCameraPicker}
-            size="lg"
-            variant={scanning ? 'secondary' : 'outline'}
+            size="sm"
+            variant={scanning && !multiPhotoMode ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiPhotoMode}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
-            aria-label="צלם פריט"
-            title="צלם פריט בודד (AI)"
+            className="flex-shrink-0 flex-col gap-1 py-1.5 px-3 min-w-[60px] h-auto border-sky-400 text-sky-700 hover:bg-sky-50 disabled:opacity-40"
+            title="צלם פריט — צילום יחיד, AI מזהה ויוצר פריט"
           >
             {scanning && !multiPhotoMode ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-sky-500" />
+            ) : (
+              <Camera className="h-4 w-4 text-sky-600" />
+            )}
+            <span className="text-[10px] leading-none font-medium">צלם</span>
+          </Button>
+          <Button
+            onClick={openMultiUploadPicker}
+            size="sm"
+            variant={multiUploading ? 'secondary' : 'outline'}
+            disabled={recording || processing || scanning || roomScanning || multiPhotoMode || multiUploading}
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
+            title="העלה מספר תמונות מהגלריה — AI מזהה פריט מכל תמונה"
+          >
+            {multiUploading ? (
               <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-muted-foreground"></div>
-                <span className="hidden sm:inline">מנתח…</span>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                {multiUploadProgress && (
+                  <span className="text-[10px] leading-none tabular-nums">{multiUploadProgress.current}/{multiUploadProgress.total}</span>
+                )}
               </>
             ) : (
               <>
-                <ImagePlus className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="hidden sm:inline">צלם</span>
+                <Images className="h-4 w-4" />
+                <span className="text-[10px] leading-none">תמונות</span>
               </>
             )}
           </Button>
+          {/* ── רציף — continuous session: keeps opening camera after each item ── */}
           <Button
-            onClick={startMultiPhotoMode}
-            size="lg"
+            onClick={multiPhotoMode ? endMultiPhotoMode : startMultiPhotoMode}
+            size="sm"
             variant={multiPhotoMode ? 'default' : 'outline'}
-            disabled={recording || processing || scanning || roomScanning}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
-            aria-label="צילום רציף — צלם מספר פריטים ברצף"
-            title="צילום רציף — צלם מספר פריטים ללא הפסקה"
+            disabled={recording || processing || scanning || roomScanning || multiUploading}
+            className={`flex-shrink-0 flex-col gap-1 py-1.5 px-3 min-w-[60px] h-auto ${
+              multiPhotoMode
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
+                : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50'
+            }`}
+            title={multiPhotoMode ? `עצור סשן רציף (${photoCaptureCount} פריטים)` : 'רציף — פתח סשן צילום רב-פריטי'}
           >
             {multiPhotoMode && scanning ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
-                <span className="hidden sm:inline">מנתח…</span>
-              </>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
             ) : (
-              <>
-                <Camera className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="hidden sm:inline">רציף</span>
-                {multiPhotoMode && photoCaptureCount > 0 && (
-                  <span className="text-xs bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">{photoCaptureCount}</span>
-                )}
-              </>
+              <Repeat2 className="h-4 w-4" />
             )}
+            <span className="text-[10px] leading-none font-medium">
+              {multiPhotoMode ? `עצור (${photoCaptureCount})` : 'רציף'}
+            </span>
           </Button>
           <Button
             onClick={() => setShowGuided(true)}
-            size="lg"
+            size="sm"
             variant="outline"
             disabled={recording || processing || scanning || roomScanning}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4 border-primary/40"
-            aria-label="סריקה מונחית — AI מלווה אותך חדר-אחרי-חדר"
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto border-primary/40"
             title="סריקה מונחית חדר-חדר"
           >
-            <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-            <span className="hidden sm:inline">מונחה</span>
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-[10px] leading-none">מונחה</span>
           </Button>
           <Button
             onClick={openRoomPicker}
-            size="lg"
+            size="sm"
             variant={roomScanning ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning}
-            className="gap-2 h-12 sm:h-14 px-3 sm:px-4"
-            aria-label="סריקת חדר (AI — פריטים מרובים)"
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
             title="סריקת חדר — צילום אחד, פריטים מרובים"
           >
             {roomScanning ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-muted-foreground"></div>
-                <span className="hidden sm:inline">סורק…</span>
-              </>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground" />
             ) : (
-              <>
-                <Scan className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="hidden sm:inline">חדר</span>
-              </>
+              <Scan className="h-4 w-4" />
             )}
+            <span className="text-[10px] leading-none">חדר</span>
           </Button>
-          <Button onClick={() => setShowManualDialog(true)} size="lg" className="gap-2 h-12 sm:h-14 w-12 sm:w-auto px-3 sm:px-4" variant="outline" disabled={recording || processing || scanning}>
-            <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span className="hidden sm:inline">ידני</span>
+          <Button
+            onClick={() => setShowManualDialog(true)}
+            size="sm"
+            variant="outline"
+            disabled={recording || processing || scanning}
+            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="text-[10px] leading-none">ידני</span>
           </Button>
         </div>
         {/* Hidden file input — opens the device camera on mobile, file picker on desktop. */}
@@ -1465,14 +1561,23 @@ export default function ApartmentDetail() {
           className="hidden"
           onChange={handleImageCapture}
         />
-        {/* Hidden input for the per-item Camera icon (attach photo to existing item). */}
+        {/* Hidden input for the per-item Camera icon (attach photo to existing item). No capture= so OS shows camera+gallery choice; multiple allows selecting several at once. */}
         <input
           ref={itemPhotoInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
+          multiple
           className="hidden"
           onChange={attachPhotoToItem}
+        />
+        {/* Hidden input for multi-gallery upload — creates new items via AI for each photo. */}
+        <input
+          ref={multiUploadInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleMultiUpload}
         />
         {/* Hidden input for the room sweep (parse-room-image). */}
         <input
@@ -1530,26 +1635,45 @@ export default function ApartmentDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Multi-photo continue capture dialog */}
+      {/* Multi-photo continue capture dialog
+          ⚠️  "צלם עוד" MUST be a <label> that directly triggers the file input —
+          programmatic .click() from a button callback is blocked on iOS/Android */}
       <Dialog open={showContinueCaptureDialog} onOpenChange={(open) => { if (!open) endMultiPhotoMode(); }}>
         <DialogContent dir="rtl" className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>פריט נוסף בהצלחה</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-emerald-500" />
+              פריט {photoCaptureCount} נוסף!
+            </DialogTitle>
             <DialogDescription>
-              {photoCaptureCount} תמונות צולמו עד כה. להמשיך לצלם?
+              לחץ "צלם עוד" לצילום הפריט הבא, או "סיום" לסיום הסשן.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" onClick={endMultiPhotoMode}>
+            <Button variant="outline" onClick={endMultiPhotoMode} className="gap-2">
+              <X className="h-4 w-4" />
               סיום ({photoCaptureCount})
             </Button>
-            <Button onClick={continueCapturing} className="gap-2">
-              <Camera className="h-4 w-4" />
-              צלם עוד
-            </Button>
+            {/* Label triggers continueInputRef directly — trusted user gesture, works on mobile */}
+            <label htmlFor="fc-continue-capture" className="cursor-pointer">
+              <span className="inline-flex items-center gap-2 h-9 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors select-none">
+                <Camera className="h-4 w-4" />
+                צלם עוד
+              </span>
+            </label>
           </div>
         </DialogContent>
       </Dialog>
+      {/* Dedicated input for the continue-capture label above */}
+      <input
+        id="fc-continue-capture"
+        ref={continueInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleContinueCapture}
+      />
 
       {/* Gmail-style undo flyout — appears for 5s after every auto-insert batch. */}
       <UndoFlyout
