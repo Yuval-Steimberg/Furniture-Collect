@@ -313,8 +313,8 @@ export default function CollectionPrep() {
         completed: apts?.filter((a: any) => a.status === 'COMPLETED').length ?? 0,
       });
 
-      // Try loading items with collection_order (requires migration).
-      // Fall back to material_category ordering if the column doesn't exist yet.
+      // Try full query (collection_order + notes — both require migrations).
+      // Degrade gracefully: strip unrecognised columns one level at a time.
       let { data: itemsData, error } = await supabase.from('items')
         .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,collection_order,apartment_id,apartments(building_number,apartment_number)')
         .eq('project_id', projectId!)
@@ -323,20 +323,29 @@ export default function CollectionPrep() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        // collection_order column not yet migrated — fall back to original working query
-        const fallback = await supabase.from('items')
+        // Try without collection_order but keep notes
+        const r2 = await supabase.from('items')
           .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,apartment_id,apartments(building_number,apartment_number)')
           .eq('project_id', projectId!)
           .eq('intended_for_collection', true)
           .order('material_category');
-        if (fallback.error) throw new Error(`items fallback: ${fallback.error.message} (${fallback.error.code})`);
-        itemsData = fallback.data;
+        if (!r2.error) {
+          itemsData = r2.data;
+        } else {
+          // Strip notes too — base schema only
+          const r3 = await supabase.from('items')
+            .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,apartment_id,apartments(building_number,apartment_number)')
+            .eq('project_id', projectId!)
+            .eq('intended_for_collection', true)
+            .order('material_category');
+          if (r3.error) throw new Error(r3.error.message);
+          itemsData = r3.data;
+        }
       }
 
       setItems((itemsData as unknown as Item[]) ?? []);
     } catch (err: any) {
-      const msg = err?.message ?? JSON.stringify(err);
-      toast.error(`שגיאה: ${msg}`);
+      toast.error('שגיאה בטעינת נתונים');
       console.error('CollectionPrep loadData error:', err);
     } finally {
       setLoading(false);
