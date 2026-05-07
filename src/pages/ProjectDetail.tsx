@@ -223,6 +223,22 @@ export default function ProjectDetail() {
       />
 
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">
+
+        {/* Preparation / planning shortcut — first thing visible */}
+        <button
+          onClick={() => navigate(`/projects/${projectId}/preparation`)}
+          className="w-full mb-4 flex items-center gap-3 rounded-xl bg-primary px-4 py-3.5 text-right active:scale-[0.98] transition-transform"
+        >
+          <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+            <ClipboardList className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-extrabold text-base text-white leading-tight">תכנון איסוף</p>
+            <p className="text-[11px] text-white/70 mt-0.5">סקירה, המלצות וסדרי עדיפויות לפירוק</p>
+          </div>
+          <ArrowLeft className="h-5 w-5 text-white/70 flex-shrink-0" />
+        </button>
+
         {/* Summary stats */}
         {buildings.length > 0 && (
           <div className="grid grid-cols-3 gap-2 mb-4">
@@ -240,21 +256,6 @@ export default function ProjectDetail() {
             </div>
           </div>
         )}
-
-        {/* Preparation / planning shortcut — prominent for managers */}
-        <button
-          onClick={() => navigate(`/projects/${projectId}/preparation`)}
-          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors px-4 py-3 text-right"
-        >
-          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-            <ClipboardList className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-sm text-foreground">תכנון איסוף</p>
-            <p className="text-[11px] text-muted-foreground">סקירה כללית לתכנון עבודת הפירוק — פריטים, חומרים ומשקלות</p>
-          </div>
-          <ArrowLeft className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-        </button>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-lg sm:text-xl font-bold">בניינים ודירות</h2>
