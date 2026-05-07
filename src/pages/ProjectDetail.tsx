@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package, Search, ChevronsDownUp, ChevronsUpDown, X } from 'lucide-react';
+import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package, Search, ChevronsDownUp, ChevronsUpDown, X, ClipboardList } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonProjectCard } from '@/components/SkeletonCard';
 import { PageHeader } from '@/components/PageHeader';
@@ -209,10 +209,13 @@ export default function ProjectDetail() {
         onBack={() => navigate('/projects')}
         actions={
           <>
-            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/users`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8">
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/users`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8" title="ניהול משתמשים">
               <Users className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/statistics`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8">
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/preparation`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8" title="תכנון איסוף">
+              <ClipboardList className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/statistics`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8" title="סטטיסטיקות">
               <BarChart3 className="h-4 w-4" />
             </Button>
           </>
