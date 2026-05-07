@@ -314,7 +314,7 @@ export default function CollectionPrep() {
       });
 
       // Try loading items with collection_order (requires migration).
-      // Fall back to created_at ordering if the column doesn't exist yet.
+      // Fall back to material_category ordering if the column doesn't exist yet.
       let { data: itemsData, error } = await supabase.from('items')
         .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,collection_order,apartment_id,apartments(building_number,apartment_number)')
         .eq('project_id', projectId!)
@@ -323,20 +323,21 @@ export default function CollectionPrep() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        // column probably not migrated yet — retry without collection_order
+        // collection_order column not yet migrated — fall back to original working query
         const fallback = await supabase.from('items')
           .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,apartment_id,apartments(building_number,apartment_number)')
           .eq('project_id', projectId!)
           .eq('intended_for_collection', true)
-          .order('created_at', { ascending: true });
-        if (fallback.error) throw fallback.error;
+          .order('material_category');
+        if (fallback.error) throw new Error(`items fallback: ${fallback.error.message} (${fallback.error.code})`);
         itemsData = fallback.data;
       }
 
       setItems((itemsData as unknown as Item[]) ?? []);
     } catch (err: any) {
-      toast.error('שגיאה בטעינת נתונים');
-      console.error(err);
+      const msg = err?.message ?? JSON.stringify(err);
+      toast.error(`שגיאה: ${msg}`);
+      console.error('CollectionPrep loadData error:', err);
     } finally {
       setLoading(false);
     }
