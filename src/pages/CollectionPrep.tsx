@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/PageHeader';
@@ -8,7 +8,7 @@ import { SkeletonProjectCard } from '@/components/SkeletonCard';
 import {
   Building2, Package, CheckCircle2, ChevronDown, ChevronUp, MapPin,
   Lightbulb, Truck, AlertTriangle, Recycle, Star,
-  CalendarDays, User, MapPinned,
+  CalendarDays, User, MapPinned, MessageSquarePlus, X, Check, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatKg } from '@/lib/sustainability';
@@ -53,6 +53,7 @@ interface Item {
   material_category: string;
   estimated_weight_kg: number | null;
   collected: boolean;
+  notes: string | null;
   apartment_id: string;
   apartments: { building_number: string; apartment_number: string } | null;
 }
@@ -106,24 +107,100 @@ function CategoryDot({ cat }: { cat: string }) {
   );
 }
 
-function ItemRow({ item }: { item: Item }) {
+interface ItemRowProps {
+  item: Item;
+  updating: boolean;
+  editingNote: boolean;
+  onToggle: () => void;
+  onOpenNote: () => void;
+  onCloseNote: () => void;
+  onSaveNote: (note: string) => void;
+}
+
+function ItemRow({ item, updating, editingNote, onToggle, onOpenNote, onCloseNote, onSaveNote }: ItemRowProps) {
+  const [draft, setDraft] = useState(item.notes ?? '');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editingNote && textareaRef.current) textareaRef.current.focus();
+  }, [editingNote]);
+
   return (
-    <div className="flex items-start gap-2.5 py-2 border-b border-border/50 last:border-0">
-      <CategoryDot cat={item.material_category} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-snug truncate">{item.description}</p>
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-          {item.location && <><MapPin className="h-3 w-3 flex-shrink-0" />{item.location}</>}
-          {item.quantity > 1 && <span>× {item.quantity}</span>}
-        </p>
+    <div className="py-2 border-b border-border/50 last:border-0">
+      <div className="flex items-start gap-2.5">
+        <CategoryDot cat={item.material_category} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium leading-snug truncate">{item.description}</p>
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+            {item.location && <><MapPin className="h-3 w-3 flex-shrink-0" />{item.location}</>}
+            {item.quantity > 1 && <span>× {item.quantity}</span>}
+          </p>
+          {item.notes && !editingNote && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 mt-1 leading-snug">
+              {item.notes}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <span className="text-xs text-muted-foreground">{CATEGORY_LABELS[item.material_category] ?? item.material_category}</span>
+          {itemWeight(item) > 0 && (
+            <span className="text-[11px] text-muted-foreground tabular-nums">{formatKg(itemWeight(item))}</span>
+          )}
+        </div>
+
+        {/* Status toggle */}
+        <button
+          onClick={onToggle}
+          disabled={updating}
+          className="flex-shrink-0 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border transition-colors active:scale-95 disabled:opacity-60"
+          style={item.collected
+            ? { background: '#d1fae5', color: '#065f46', borderColor: '#a7f3d0' }
+            : { background: '#f3f4f6', color: '#374151', borderColor: '#e5e7eb' }}
+        >
+          {updating
+            ? <Loader2 className="h-3 w-3 animate-spin" />
+            : item.collected
+              ? <><Check className="h-3 w-3" />נאסף</>
+              : 'ממתין'}
+        </button>
+
+        {/* Note button */}
+        <button
+          onClick={editingNote ? onCloseNote : onOpenNote}
+          className={`flex-shrink-0 h-6 w-6 flex items-center justify-center rounded-full transition-colors ${
+            editingNote ? 'bg-muted text-muted-foreground' : item.notes ? 'text-amber-500' : 'text-muted-foreground/40 hover:text-muted-foreground'
+          }`}
+          title={editingNote ? 'סגור הערה' : 'הוסף הערה'}
+        >
+          {editingNote ? <X className="h-3.5 w-3.5" /> : <MessageSquarePlus className="h-3.5 w-3.5" />}
+        </button>
       </div>
-      <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-        <span className="text-xs text-muted-foreground">{CATEGORY_LABELS[item.material_category] ?? item.material_category}</span>
-        {itemWeight(item) > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{formatKg(itemWeight(item))}</span>}
-      </div>
-      {item.collected
-        ? <Badge className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 border-emerald-200 flex-shrink-0">נאסף</Badge>
-        : <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 flex-shrink-0">ממתין</Badge>}
+
+      {/* Inline note editor */}
+      {editingNote && (
+        <div className="mt-2 mr-5">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="הוסף הערת איסוף (למשל: פרק לפני שאר הפריטים, מוצא שמאלה...)"
+            rows={2}
+            className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+            dir="rtl"
+          />
+          <div className="flex gap-2 mt-1.5 justify-end">
+            <button
+              onClick={onCloseNote}
+              className="text-xs text-muted-foreground px-3 py-1 rounded-lg hover:bg-muted"
+            >ביטול</button>
+            <button
+              onClick={() => { onSaveNote(draft.trim()); onCloseNote(); }}
+              className="text-xs font-semibold text-primary-foreground bg-primary px-3 py-1 rounded-lg"
+            >שמור</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -133,13 +210,15 @@ function ItemRow({ item }: { item: Item }) {
 export default function CollectionPrep() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const [project, setProject]   = useState<ProjectMeta | null>(null);
+  const [project, setProject]     = useState<ProjectMeta | null>(null);
   const [aptCounts, setAptCounts] = useState({ total: 0, completed: 0 });
-  const [items, setItems]       = useState<Item[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [items, setItems]         = useState<Item[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [openBuildings, setOpenBuildings] = useState<Record<string, boolean>>({});
-  const [openApts, setOpenApts] = useState<Record<string, boolean>>({});
+  const [openApts, setOpenApts]   = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<'recommendations' | 'buildings' | 'materials' | 'items'>('recommendations');
+  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
   useEffect(() => { void loadData(); }, [projectId]);
 
@@ -157,7 +236,7 @@ export default function CollectionPrep() {
           .select('id,status')
           .eq('project_id', projectId!),
         supabase.from('items')
-          .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,apartment_id,apartments(building_number,apartment_number)')
+          .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,apartment_id,apartments(building_number,apartment_number)')
           .eq('project_id', projectId!)
           .eq('intended_for_collection', true)
           .order('material_category'),
@@ -175,6 +254,23 @@ export default function CollectionPrep() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleCollected = async (id: string, current: boolean) => {
+    setUpdatingIds(s => new Set(s).add(id));
+    setItems(prev => prev.map(i => i.id === id ? { ...i, collected: !current } : i));
+    const { error } = await supabase.from('items').update({ collected: !current }).eq('id', id);
+    if (error) {
+      setItems(prev => prev.map(i => i.id === id ? { ...i, collected: current } : i));
+      toast.error('שגיאה בעדכון סטטוס');
+    }
+    setUpdatingIds(s => { const n = new Set(s); n.delete(id); return n; });
+  };
+
+  const saveNote = async (id: string, note: string) => {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, notes: note || null } : i));
+    const { error } = await supabase.from('items').update({ notes: note || null }).eq('id', id);
+    if (error) toast.error('שגיאה בשמירת הערה');
   };
 
   // ── derived data ──────────────────────────────────────────────────────────
@@ -227,14 +323,11 @@ export default function CollectionPrep() {
     return Object.entries(map).sort((a, b) => (b[1].pending + b[1].collected) - (a[1].pending + a[1].collected));
   }, [items]);
 
-  // Priority apartments: score = pending items × (pendingWeight or item count as proxy)
   const priorityApts = useMemo(() => {
     const all: (AptSummary & { score: number })[] = [];
     buildings.forEach(b => b.apartments.forEach(apt => {
       if (apt.pending.length === 0) return;
-      const score = apt.pendingWeight > 0
-        ? apt.pendingWeight
-        : apt.pending.length * 30; // fallback: 30kg proxy per item
+      const score = apt.pendingWeight > 0 ? apt.pendingWeight : apt.pending.length * 30;
       all.push({ ...apt, score });
     }));
     return all.sort((a, b) => b.score - a.score).slice(0, 5);
@@ -254,6 +347,16 @@ export default function CollectionPrep() {
 
   const toggleBuilding = (b: string) => setOpenBuildings(p => ({ ...p, [b]: !p[b] }));
   const toggleApt      = (id: string) => setOpenApts(p => ({ ...p, [id]: !p[id] }));
+
+  const itemRowProps = (item: Item): ItemRowProps => ({
+    item,
+    updating: updatingIds.has(item.id),
+    editingNote: editingNoteId === item.id,
+    onToggle: () => toggleCollected(item.id, item.collected),
+    onOpenNote: () => setEditingNoteId(item.id),
+    onCloseNote: () => setEditingNoteId(null),
+    onSaveNote: (note) => saveNote(item.id, note),
+  });
 
   // ── loading ────────────────────────────────────────────────────────────────
 
@@ -287,7 +390,6 @@ export default function CollectionPrep() {
           </p>
           <h2 className="text-xl font-extrabold tracking-tight leading-tight mb-3">{project?.name}</h2>
 
-          {/* Meta row */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-sidebar-foreground/70 mb-4">
             {project?.city && (
               <span className="flex items-center gap-1.5">
@@ -307,13 +409,12 @@ export default function CollectionPrep() {
             )}
           </div>
 
-          {/* Stats grid */}
           <div className="grid grid-cols-4 gap-2 mb-4">
             {[
-              { v: aptCounts.total,     l: 'דירות',       c: 'text-sidebar-foreground' },
-              { v: aptCounts.completed, l: 'הושלמו',      c: 'text-emerald-400' },
-              { v: totalPending,        l: 'לאיסוף',      c: 'text-primary' },
-              { v: totalCollected,      l: 'נאספו',       c: 'text-emerald-400' },
+              { v: aptCounts.total,     l: 'דירות',  c: 'text-sidebar-foreground' },
+              { v: aptCounts.completed, l: 'הושלמו', c: 'text-emerald-400' },
+              { v: totalPending,        l: 'לאיסוף', c: 'text-primary' },
+              { v: totalCollected,      l: 'נאספו',  c: 'text-emerald-400' },
             ].map(({ v, l, c }) => (
               <div key={l} className="text-center rounded-lg bg-sidebar-foreground/5 py-2">
                 <p className={`text-xl font-extrabold tabular-nums leading-none ${c}`}>{v}</p>
@@ -322,7 +423,6 @@ export default function CollectionPrep() {
             ))}
           </div>
 
-          {/* Collection progress bar */}
           {totalPending + totalCollected > 0 && (
             <div>
               <div className="flex justify-between text-[11px] text-sidebar-foreground/60 mb-1">
@@ -367,7 +467,6 @@ export default function CollectionPrep() {
         {/* ═══ Tab: recommendations ═══ */}
         {activeTab === 'recommendations' && (
           <div className="space-y-3">
-
             {totalPending === 0 && totalCollected === 0 ? (
               <EmptyState icon={Package} title="אין פריטים לאיסוף" description="לא סומנו פריטים לאיסוף בפרויקט זה." />
             ) : (
@@ -528,7 +627,9 @@ export default function CollectionPrep() {
                         </button>
                         {openApts[apt.id] && (
                           <div className="px-4 pb-2 bg-muted/20">
-                            {[...apt.pending, ...apt.collected].map(item => <ItemRow key={item.id} item={item} />)}
+                            {[...apt.pending, ...apt.collected].map(item => (
+                              <ItemRow key={item.id} {...itemRowProps(item)} />
+                            ))}
                           </div>
                         )}
                       </div>
@@ -588,7 +689,9 @@ export default function CollectionPrep() {
                       <span className="mr-auto text-[11px] text-muted-foreground">{all.length} פריטים</span>
                     </div>
                     <div className="px-4 py-1">
-                      {all.map(item => <ItemRow key={item.id} item={item} />)}
+                      {all.map(item => (
+                        <ItemRow key={item.id} {...itemRowProps(item)} />
+                      ))}
                     </div>
                   </div>
                 );
