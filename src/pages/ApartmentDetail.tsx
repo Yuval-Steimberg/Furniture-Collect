@@ -191,9 +191,9 @@ export default function ApartmentDetail() {
           *,
           created_by:profiles!items_created_by_user_id_fkey(name),
           collector_profile:profiles!items_collected_by_user_id_fkey(name)
-        `).eq('apartment_id', apartmentId).order('created_at', {
-        ascending: false
-      });
+        `).eq('apartment_id', apartmentId)
+        .order('collection_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true });
       if (itemsError) throw itemsError;
       setItems(itemsData || []);
     } catch (error: any) {

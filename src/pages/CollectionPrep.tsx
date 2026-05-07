@@ -9,6 +9,7 @@ import {
   Building2, Package, CheckCircle2, ChevronDown, ChevronUp, MapPin,
   Lightbulb, Truck, AlertTriangle, Recycle, Star,
   CalendarDays, User, MapPinned, MessageSquarePlus, X, Check, Loader2,
+  ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatKg } from '@/lib/sustainability';
@@ -54,6 +55,7 @@ interface Item {
   estimated_weight_kg: number | null;
   collected: boolean;
   notes: string | null;
+  collection_order: number | null;
   apartment_id: string;
   apartments: { building_number: string; apartment_number: string } | null;
 }
@@ -62,8 +64,7 @@ interface AptSummary {
   id: string;
   building_number: string;
   apartment_number: string;
-  pending: Item[];
-  collected: Item[];
+  items: Item[];       // all items sorted by collection_order
   totalWeight: number;
   pendingWeight: number;
 }
@@ -109,15 +110,22 @@ function CategoryDot({ cat }: { cat: string }) {
 
 interface ItemRowProps {
   item: Item;
+  index: number;
+  total: number;
   updating: boolean;
   editingNote: boolean;
   onToggle: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onOpenNote: () => void;
   onCloseNote: () => void;
   onSaveNote: (note: string) => void;
 }
 
-function ItemRow({ item, updating, editingNote, onToggle, onOpenNote, onCloseNote, onSaveNote }: ItemRowProps) {
+function ItemRow({
+  item, index, total, updating, editingNote,
+  onToggle, onMoveUp, onMoveDown, onOpenNote, onCloseNote, onSaveNote,
+}: ItemRowProps) {
   const [draft, setDraft] = useState(item.notes ?? '');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -125,10 +133,40 @@ function ItemRow({ item, updating, editingNote, onToggle, onOpenNote, onCloseNot
     if (editingNote && textareaRef.current) textareaRef.current.focus();
   }, [editingNote]);
 
+  // keep draft in sync if note changes externally
+  useEffect(() => { setDraft(item.notes ?? ''); }, [item.notes]);
+
   return (
     <div className="py-2 border-b border-border/50 last:border-0">
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2">
+
+        {/* Reorder arrows — stacked pair */}
+        <div className="flex flex-col gap-0.5 flex-shrink-0 mt-0.5">
+          <button
+            onClick={onMoveUp}
+            disabled={index === 0}
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            title="העלה בסדר"
+          >
+            <ArrowUp className="h-3 w-3" />
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={index === total - 1}
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            title="הורד בסדר"
+          >
+            <ArrowDown className="h-3 w-3" />
+          </button>
+        </div>
+
+        {/* Order number */}
+        <span className="text-[10px] font-bold text-muted-foreground/50 w-4 text-center flex-shrink-0 mt-1.5 tabular-nums">
+          {index + 1}
+        </span>
+
         <CategoryDot cat={item.material_category} />
+
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium leading-snug truncate">{item.description}</p>
           <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
@@ -142,10 +180,10 @@ function ItemRow({ item, updating, editingNote, onToggle, onOpenNote, onCloseNot
           )}
         </div>
 
-        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-          <span className="text-xs text-muted-foreground">{CATEGORY_LABELS[item.material_category] ?? item.material_category}</span>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <span className="text-[10px] text-muted-foreground">{CATEGORY_LABELS[item.material_category] ?? item.material_category}</span>
           {itemWeight(item) > 0 && (
-            <span className="text-[11px] text-muted-foreground tabular-nums">{formatKg(itemWeight(item))}</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{formatKg(itemWeight(item))}</span>
           )}
         </div>
 
@@ -179,7 +217,7 @@ function ItemRow({ item, updating, editingNote, onToggle, onOpenNote, onCloseNot
 
       {/* Inline note editor */}
       {editingNote && (
-        <div className="mt-2 mr-5">
+        <div className="mt-2 mr-12">
           <textarea
             ref={textareaRef}
             value={draft}
@@ -202,6 +240,42 @@ function ItemRow({ item, updating, editingNote, onToggle, onOpenNote, onCloseNot
         </div>
       )}
     </div>
+  );
+}
+
+// ─── apartment item list (shared between tabs) ────────────────────────────────
+
+interface AptItemListProps {
+  apt: AptSummary;
+  updatingIds: Set<string>;
+  editingNoteId: string | null;
+  onToggle: (id: string, collected: boolean) => void;
+  onMove: (aptId: string, itemId: string, dir: 'up' | 'down') => void;
+  onOpenNote: (id: string) => void;
+  onCloseNote: () => void;
+  onSaveNote: (id: string, note: string) => void;
+}
+
+function AptItemList({ apt, updatingIds, editingNoteId, onToggle, onMove, onOpenNote, onCloseNote, onSaveNote }: AptItemListProps) {
+  return (
+    <>
+      {apt.items.map((item, idx) => (
+        <ItemRow
+          key={item.id}
+          item={item}
+          index={idx}
+          total={apt.items.length}
+          updating={updatingIds.has(item.id)}
+          editingNote={editingNoteId === item.id}
+          onToggle={() => onToggle(item.id, item.collected)}
+          onMoveUp={() => onMove(apt.id, item.id, 'up')}
+          onMoveDown={() => onMove(apt.id, item.id, 'down')}
+          onOpenNote={() => onOpenNote(item.id)}
+          onCloseNote={onCloseNote}
+          onSaveNote={(note) => onSaveNote(item.id, note)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -236,10 +310,11 @@ export default function CollectionPrep() {
           .select('id,status')
           .eq('project_id', projectId!),
         supabase.from('items')
-          .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,apartment_id,apartments(building_number,apartment_number)')
+          .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,collection_order,apartment_id,apartments(building_number,apartment_number)')
           .eq('project_id', projectId!)
           .eq('intended_for_collection', true)
-          .order('material_category'),
+          .order('collection_order', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: true }),
       ]);
       if (error) throw error;
       setProject(proj);
@@ -255,6 +330,8 @@ export default function CollectionPrep() {
       setLoading(false);
     }
   };
+
+  // ── mutations ─────────────────────────────────────────────────────────────
 
   const toggleCollected = async (id: string, current: boolean) => {
     setUpdatingIds(s => new Set(s).add(id));
@@ -273,34 +350,82 @@ export default function CollectionPrep() {
     if (error) toast.error('שגיאה בשמירת הערה');
   };
 
+  const moveItem = async (aptId: string, itemId: string, dir: 'up' | 'down') => {
+    // All items for this apartment in current display order
+    const aptItems = items
+      .filter(i => i.apartment_id === aptId)
+      .sort((a, b) => {
+        const oa = a.collection_order ?? Infinity;
+        const ob = b.collection_order ?? Infinity;
+        return oa !== ob ? oa - ob : 0;
+      });
+
+    const idx = aptItems.findIndex(i => i.id === itemId);
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= aptItems.length) return;
+
+    const reordered = [...aptItems];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+
+    // Assign fresh sequential collection_order values
+    const updates = reordered.map((item, i) => ({ id: item.id, collection_order: i }));
+
+    // Optimistic update
+    setItems(prev => prev.map(item => {
+      const u = updates.find(x => x.id === item.id);
+      return u ? { ...item, collection_order: u.collection_order } : item;
+    }));
+
+    // Persist
+    const results = await Promise.all(
+      updates.map(u => supabase.from('items').update({ collection_order: u.collection_order }).eq('id', u.id))
+    );
+    if (results.some(r => r.error)) toast.error('שגיאה בשמירת סדר האיסוף');
+  };
+
   // ── derived data ──────────────────────────────────────────────────────────
 
   const buildings = useMemo<BuildingGroup[]>(() => {
     const aptMap: Record<string, AptSummary> = {};
+
+    // Items are already sorted by collection_order from the query
     items.forEach(it => {
       const apt = it.apartments;
       if (!apt) return;
-      const key = `${apt.building_number}__${apt.apartment_number}__${it.apartment_id}`;
+      const key = it.apartment_id;
       if (!aptMap[key]) aptMap[key] = {
         id: it.apartment_id,
         building_number: apt.building_number,
         apartment_number: apt.apartment_number,
-        pending: [], collected: [], totalWeight: 0, pendingWeight: 0,
+        items: [],
+        totalWeight: 0,
+        pendingWeight: 0,
       };
-      (it.collected ? aptMap[key].collected : aptMap[key].pending).push(it);
+      aptMap[key].items.push(it);
       aptMap[key].totalWeight += itemWeight(it);
       if (!it.collected) aptMap[key].pendingWeight += itemWeight(it);
     });
 
+    // Re-sort each apartment's items by the (possibly updated) collection_order
+    Object.values(aptMap).forEach(apt => {
+      apt.items.sort((a, b) => {
+        const oa = a.collection_order ?? Infinity;
+        const ob = b.collection_order ?? Infinity;
+        return oa - ob;
+      });
+    });
+
     const bldMap: Record<string, BuildingGroup> = {};
     Object.values(aptMap).forEach(apt => {
+      const pending   = apt.items.filter(i => !i.collected).length;
+      const collected = apt.items.filter(i =>  i.collected).length;
       if (!bldMap[apt.building_number]) bldMap[apt.building_number] = {
         building_number: apt.building_number, apartments: [],
         pendingCount: 0, collectedCount: 0, totalWeight: 0,
       };
       bldMap[apt.building_number].apartments.push(apt);
-      bldMap[apt.building_number].pendingCount  += apt.pending.length;
-      bldMap[apt.building_number].collectedCount += apt.collected.length;
+      bldMap[apt.building_number].pendingCount  += pending;
+      bldMap[apt.building_number].collectedCount += collected;
       bldMap[apt.building_number].totalWeight   += apt.totalWeight;
     });
 
@@ -326,8 +451,8 @@ export default function CollectionPrep() {
   const priorityApts = useMemo(() => {
     const all: (AptSummary & { score: number })[] = [];
     buildings.forEach(b => b.apartments.forEach(apt => {
-      if (apt.pending.length === 0) return;
-      const score = apt.pendingWeight > 0 ? apt.pendingWeight : apt.pending.length * 30;
+      if (!apt.items.some(i => !i.collected)) return;
+      const score = apt.pendingWeight > 0 ? apt.pendingWeight : apt.items.filter(i => !i.collected).length * 30;
       all.push({ ...apt, score });
     }));
     return all.sort((a, b) => b.score - a.score).slice(0, 5);
@@ -348,15 +473,15 @@ export default function CollectionPrep() {
   const toggleBuilding = (b: string) => setOpenBuildings(p => ({ ...p, [b]: !p[b] }));
   const toggleApt      = (id: string) => setOpenApts(p => ({ ...p, [id]: !p[id] }));
 
-  const itemRowProps = (item: Item): ItemRowProps => ({
-    item,
-    updating: updatingIds.has(item.id),
-    editingNote: editingNoteId === item.id,
-    onToggle: () => toggleCollected(item.id, item.collected),
-    onOpenNote: () => setEditingNoteId(item.id),
+  const listProps: Omit<AptItemListProps, 'apt'> = {
+    updatingIds,
+    editingNoteId,
+    onToggle:    toggleCollected,
+    onMove:      moveItem,
+    onOpenNote:  id => setEditingNoteId(id),
     onCloseNote: () => setEditingNoteId(null),
-    onSaveNote: (note) => saveNote(item.id, note),
-  });
+    onSaveNote:  saveNote,
+  };
 
   // ── loading ────────────────────────────────────────────────────────────────
 
@@ -471,7 +596,6 @@ export default function CollectionPrep() {
               <EmptyState icon={Package} title="אין פריטים לאיסוף" description="לא סומנו פריטים לאיסוף בפרויקט זה." />
             ) : (
               <>
-                {/* Truck recommendation */}
                 <div className="rounded-xl border border-border bg-card px-4 py-3 flex items-start gap-3">
                   <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <Truck className="h-5 w-5 text-primary" />
@@ -483,7 +607,6 @@ export default function CollectionPrep() {
                   </div>
                 </div>
 
-                {/* Priority apartments */}
                 {priorityApts.length > 0 && (
                   <div className="rounded-xl border border-border bg-card overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-border bg-muted/40 flex items-center gap-2">
@@ -503,9 +626,9 @@ export default function CollectionPrep() {
                               בניין {apt.building_number} · דירה {apt.apartment_number}
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              {apt.pending.length} פריטים ממתינים
+                              {apt.items.filter(i => !i.collected).length} פריטים ממתינים
                               {apt.pendingWeight > 0 && ` · ${formatKg(apt.pendingWeight)}`}
-                              {topCategories(apt.pending).map(c => ` · ${CATEGORY_LABELS[c] ?? c}`).join('')}
+                              {topCategories(apt.items.filter(i => !i.collected)).map(c => ` · ${CATEGORY_LABELS[c] ?? c}`).join('')}
                             </p>
                           </div>
                           {idx === 0 && (
@@ -519,7 +642,6 @@ export default function CollectionPrep() {
                   </div>
                 )}
 
-                {/* Category-specific tips */}
                 {categoriesWithTips.length > 0 && (
                   <div className="rounded-xl border border-border bg-card overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-border bg-muted/40 flex items-center gap-2">
@@ -547,7 +669,6 @@ export default function CollectionPrep() {
                   </div>
                 )}
 
-                {/* General tips */}
                 <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
                   <p className="font-bold text-sm flex items-center gap-2">
                     <Lightbulb className="h-4 w-4 text-amber-500" />
@@ -607,18 +728,18 @@ export default function CollectionPrep() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold">דירה {apt.apartment_number}</p>
                             <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                              {apt.pending.length > 0 && (
+                              {apt.items.filter(i => !i.collected).length > 0 && (
                                 <span className="flex items-center gap-1 text-[11px] text-primary font-medium">
-                                  <Package className="h-3 w-3" />{apt.pending.length} ממתינים
+                                  <Package className="h-3 w-3" />{apt.items.filter(i => !i.collected).length} ממתינים
                                 </span>
                               )}
-                              {apt.collected.length > 0 && (
+                              {apt.items.filter(i => i.collected).length > 0 && (
                                 <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
-                                  <CheckCircle2 className="h-3 w-3" />{apt.collected.length} נאספו
+                                  <CheckCircle2 className="h-3 w-3" />{apt.items.filter(i => i.collected).length} נאספו
                                 </span>
                               )}
                               {apt.totalWeight > 0 && <span className="text-[11px] text-muted-foreground">{formatKg(apt.totalWeight)}</span>}
-                              {topCategories([...apt.pending, ...apt.collected]).map(cat => <CategoryDot key={cat} cat={cat} />)}
+                              {topCategories(apt.items).map(cat => <CategoryDot key={cat} cat={cat} />)}
                             </div>
                           </div>
                           {openApts[apt.id]
@@ -627,9 +748,7 @@ export default function CollectionPrep() {
                         </button>
                         {openApts[apt.id] && (
                           <div className="px-4 pb-2 bg-muted/20">
-                            {[...apt.pending, ...apt.collected].map(item => (
-                              <ItemRow key={item.id} {...itemRowProps(item)} />
-                            ))}
+                            <AptItemList apt={apt} {...listProps} />
                           </div>
                         )}
                       </div>
@@ -677,8 +796,7 @@ export default function CollectionPrep() {
           <div className="space-y-3">
             {buildings.map(bld =>
               bld.apartments.map(apt => {
-                const all = [...apt.pending, ...apt.collected];
-                if (all.length === 0) return null;
+                if (apt.items.length === 0) return null;
                 return (
                   <div key={apt.id} className="rounded-xl border border-border bg-card overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-border bg-muted/40 flex items-center gap-2">
@@ -686,12 +804,10 @@ export default function CollectionPrep() {
                       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                         בניין {bld.building_number} · דירה {apt.apartment_number}
                       </span>
-                      <span className="mr-auto text-[11px] text-muted-foreground">{all.length} פריטים</span>
+                      <span className="mr-auto text-[11px] text-muted-foreground">{apt.items.length} פריטים</span>
                     </div>
                     <div className="px-4 py-1">
-                      {all.map(item => (
-                        <ItemRow key={item.id} {...itemRowProps(item)} />
-                      ))}
+                      <AptItemList apt={apt} {...listProps} />
                     </div>
                   </div>
                 );
