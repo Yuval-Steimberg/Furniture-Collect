@@ -298,30 +298,41 @@ export default function CollectionPrep() {
 
   const loadData = async () => {
     try {
-      const [
-        { data: proj },
-        { data: apts },
-        { data: itemsData, error },
-      ] = await Promise.all([
+      // Load project meta and apartments independently — always show these even if items fail
+      const [{ data: proj }, { data: apts }] = await Promise.all([
         supabase.from('projects')
           .select('name,city,developer_name,start_date')
           .eq('id', projectId!).single(),
         supabase.from('apartments')
           .select('id,status')
           .eq('project_id', projectId!),
-        supabase.from('items')
-          .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,collection_order,apartment_id,apartments(building_number,apartment_number)')
-          .eq('project_id', projectId!)
-          .eq('intended_for_collection', true)
-          .order('collection_order', { ascending: true, nullsFirst: false })
-          .order('created_at', { ascending: true }),
       ]);
-      if (error) throw error;
       setProject(proj);
       setAptCounts({
         total: apts?.length ?? 0,
         completed: apts?.filter((a: any) => a.status === 'COMPLETED').length ?? 0,
       });
+
+      // Try loading items with collection_order (requires migration).
+      // Fall back to created_at ordering if the column doesn't exist yet.
+      let { data: itemsData, error } = await supabase.from('items')
+        .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,collection_order,apartment_id,apartments(building_number,apartment_number)')
+        .eq('project_id', projectId!)
+        .eq('intended_for_collection', true)
+        .order('collection_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        // column probably not migrated yet — retry without collection_order
+        const fallback = await supabase.from('items')
+          .select('id,description,quantity,location,material_category,estimated_weight_kg,collected,notes,apartment_id,apartments(building_number,apartment_number)')
+          .eq('project_id', projectId!)
+          .eq('intended_for_collection', true)
+          .order('created_at', { ascending: true });
+        if (fallback.error) throw fallback.error;
+        itemsData = fallback.data;
+      }
+
       setItems((itemsData as unknown as Item[]) ?? []);
     } catch (err: any) {
       toast.error('שגיאה בטעינת נתונים');

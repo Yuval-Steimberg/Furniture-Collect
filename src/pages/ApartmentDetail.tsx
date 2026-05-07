@@ -184,17 +184,24 @@ export default function ApartmentDetail() {
       } = await supabase.from('apartments').select('*, projects(name)').eq('id', apartmentId).single();
       if (apartmentError) throw apartmentError;
       setApartmentInfo(apartment);
-      const {
-        data: itemsData,
-        error: itemsError
-      } = await supabase.from('items').select(`
+      let { data: itemsData, error: itemsError } = await supabase.from('items').select(`
           *,
           created_by:profiles!items_created_by_user_id_fkey(name),
           collector_profile:profiles!items_collected_by_user_id_fkey(name)
         `).eq('apartment_id', apartmentId)
         .order('collection_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true });
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        // collection_order column may not exist yet — fall back to created_at
+        const fallback = await supabase.from('items').select(`
+            *,
+            created_by:profiles!items_created_by_user_id_fkey(name),
+            collector_profile:profiles!items_collected_by_user_id_fkey(name)
+          `).eq('apartment_id', apartmentId)
+          .order('created_at', { ascending: true });
+        if (fallback.error) throw fallback.error;
+        itemsData = fallback.data;
+      }
       setItems(itemsData || []);
     } catch (error: any) {
       toast.error('שגיאה בטעינת נתונים');
