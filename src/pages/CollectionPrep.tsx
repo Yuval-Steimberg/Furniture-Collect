@@ -278,7 +278,7 @@ export default function CollectionPrep() {
         onBack={() => navigate(`/projects/${projectId}`)}
       />
 
-      <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4">
+      <div className="max-w-3xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 pb-32 sm:pb-6 space-y-4">
 
         {/* ── Project info card ── */}
         <div className="rounded-2xl bg-sidebar text-sidebar-foreground px-5 pt-5 pb-4">
