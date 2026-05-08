@@ -266,7 +266,7 @@ export default function Projects() {
       <div
         key={project.id}
         onClick={() => navigate(`/projects/${project.id}`)}
-        className="group cursor-pointer rounded-xl border border-border bg-card hover:shadow-md transition-all overflow-hidden active:scale-[0.99]"
+        className="group cursor-pointer rounded-xl border border-border bg-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-220 overflow-hidden active:scale-[0.985] active:translate-y-0 active:shadow-xs"
         dir="rtl"
         role="button"
         tabIndex={0}
@@ -454,9 +454,9 @@ export default function Projects() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-muted p-4 sm:p-6" dir="rtl">
-        <div className="max-w-6xl mx-auto space-y-4">
-          <div className="h-8 w-48 bg-muted-foreground/10 rounded animate-pulse" />
+      <div className="min-h-screen bg-muted" dir="rtl">
+        <PageHeader title="הפרויקטים שלי" />
+        <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             <SkeletonProjectCard />
             <SkeletonProjectCard />

@@ -5,6 +5,7 @@
 // =========================================================================
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { StatCard } from '@/components/StatCard';
@@ -217,44 +218,34 @@ export default function Dashboard() {
       {/* Hero stats */}
       <section>
         <div className="eyebrow mb-2">סקירה כללית</div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <motion.div
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+          variants={{ show: { transition: { staggerChildren: 0.06 } } }}
+          initial="hidden"
+          animate="show"
+        >
           {loading ? (
             <>
               <SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard />
             </>
           ) : (
             <>
-              <StatCard
-                label="הופנו מהטמנה"
-                value={formatKg(totals.diverted_kg)}
-                sub={`${totals.collectedCount} נאספו`}
-                icon={Leaf}
-                accent="sage"
-              />
-              <StatCard
-                label="CO₂ נחסך"
-                value={formatCO2(totals.co2_saved_kg)}
-                sub="על פני כל הפרויקטים"
-                icon={TrendingUp}
-                accent="orange"
-              />
-              <StatCard
-                label="דירות תועדו"
-                value={totals.apartmentCount}
-                sub={`${totals.projectCount} ${totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}`}
-                icon={Building2}
-                accent="slate"
-              />
-              <StatCard
-                label="פריטים"
-                value={totals.itemCount}
-                sub={`${totals.itemCount - totals.collectedCount} ממתינים`}
-                icon={Package}
-                accent="slate"
-              />
+              {[
+                { label: 'הופנו מהטמנה', value: formatKg(totals.diverted_kg), sub: `${totals.collectedCount} נאספו`, icon: Leaf, accent: 'sage' as const },
+                { label: 'CO₂ נחסך', value: formatCO2(totals.co2_saved_kg), sub: 'על פני כל הפרויקטים', icon: TrendingUp, accent: 'orange' as const },
+                { label: 'דירות תועדו', value: totals.apartmentCount, sub: `${totals.projectCount} ${totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}`, icon: Building2, accent: 'slate' as const },
+                { label: 'פריטים', value: totals.itemCount, sub: `${totals.itemCount - totals.collectedCount} ממתינים`, icon: Package, accent: 'slate' as const },
+              ].map(card => (
+                <motion.div
+                  key={card.label}
+                  variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.2, 0.7, 0.2, 1] } } }}
+                >
+                  <StatCard {...card} />
+                </motion.div>
+              ))}
             </>
           )}
-        </div>
+        </motion.div>
       </section>
 
       {/* Active projects — visual grid, not list */}
@@ -269,7 +260,12 @@ export default function Dashboard() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"
+          variants={{ show: { transition: { staggerChildren: 0.07 } } }}
+          initial="hidden"
+          animate="show"
+        >
           {loading ? (
             <><SkeletonProjectCard /><SkeletonProjectCard /></>
           ) : projects.length === 0 ? (
@@ -284,10 +280,11 @@ export default function Dashboard() {
             </div>
           ) : (
             projects.slice(0, 4).map(p => (
-              <button
+              <motion.button
                 key={p.id}
                 onClick={() => navigate(`/projects/${p.id}`)}
-                className="group text-right rounded-xl border border-border bg-card hover:shadow-md transition-all active:scale-[0.99] overflow-hidden"
+                variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.2, 0.7, 0.2, 1] } } }}
+                className="group text-right rounded-xl border border-border bg-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-220 active:scale-[0.985] active:translate-y-0 active:shadow-xs overflow-hidden"
               >
                 <div className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3 mb-3">
@@ -297,7 +294,7 @@ export default function Dashboard() {
                         {p.city} · {p.developer_name}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-accent/50 flex items-center justify-center group-hover:bg-accent transition-colors">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-accent/50 flex items-center justify-center group-hover:bg-accent transition-colors duration-220">
                       <Building2 className="h-5 w-5 text-accent-foreground" />
                     </div>
                   </div>
@@ -307,10 +304,10 @@ export default function Dashboard() {
                     <MiniStat value={formatKg(p.diverted_kg)} label="הוצלו" highlight={p.diverted_kg > 0} />
                   </div>
                 </div>
-              </button>
+              </motion.button>
             ))
           )}
-        </div>
+        </motion.div>
       </section>
 
       {/* Recent activity */}
@@ -364,7 +361,7 @@ function ActionTile({ icon: Icon, label, onClick, accent, badge }: {
   return (
     <button
       onClick={onClick}
-      className={`relative rounded-xl border p-3 sm:p-4 flex flex-col items-center gap-1.5 sm:gap-2 transition-all active:scale-[0.98] ${cls}`}
+      className={`relative rounded-xl border p-3 sm:p-4 flex flex-col items-center gap-1.5 sm:gap-2 transition-all duration-220 active:scale-[0.94] active:opacity-90 ${cls}`}
     >
       {badge != null && (
         <span className="absolute top-2 left-2 bg-foreground text-background text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums">

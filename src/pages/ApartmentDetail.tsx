@@ -1081,7 +1081,18 @@ export default function ApartmentDetail() {
     return badges[status as keyof typeof badges];
   };
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">טוען...</div>;
+    return (
+      <div className="min-h-screen bg-muted" dir="rtl">
+        <PageHeader
+          title={apartmentInfo ? `בניין ${apartmentInfo.building_number} · דירה ${apartmentInfo.apartment_number}` : 'טוען...'}
+          subtitle={apartmentInfo?.projects?.name}
+          onBack={() => navigate(`/projects/${projectId}`)}
+        />
+        <div className="px-3 sm:px-4 py-4 sm:py-6 space-y-2 sm:space-y-3">
+          <SkeletonItemRow /><SkeletonItemRow /><SkeletonItemRow /><SkeletonItemRow />
+        </div>
+      </div>
+    );
   }
   return <div className="min-h-screen bg-muted pb-24 w-screen overflow-x-hidden" dir="rtl">
       <PageHeader
@@ -1279,7 +1290,7 @@ export default function ApartmentDetail() {
                       }}
                     >
                     <Card
-                      className={`w-full transition-all ${bulkSelected.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''} ${item.status === 'discarded' ? 'opacity-60' : ''}`}
+                      className={`w-full transition-all duration-150 ${bulkSelected.has(item.id) ? 'ring-2 ring-primary ring-offset-1 bg-primary/5' : ''} ${item.status === 'discarded' ? 'opacity-60' : ''}`}
                       onClick={bulkMode ? () => toggleBulk(item.id) : undefined}
                       role={bulkMode ? 'button' : undefined}
                     >

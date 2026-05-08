@@ -1,13 +1,7 @@
 /**
- * PageHeader — Shared header component for all inner pages.
- *
- * When rendered inside AppLayout, it auto-shows a hamburger menu button
- * (mobile only) that opens the sidebar panel.
- *
- * Design tokens:
- *  bg-sidebar / text-sidebar-foreground  →  forest #333D36 / cream #FFFCF5
- *  font-extrabold tracking-tight         →  Heebo 800
- *  font-display                          →  Bowlby One SC ("JAS" wordmark)
+ * PageHeader — shared header for all inner pages.
+ * Forest background / cream text. Sticky top-0 with warm shadow.
+ * Auto-shows hamburger (mobile) when inside AppLayout.
  */
 
 import type { ReactNode } from 'react';
@@ -15,7 +9,6 @@ import { ArrowLeft, Menu } from 'lucide-react';
 import { useInAppLayout } from '@/components/AppLayout';
 import { useSidebar } from '@/components/ui/sidebar';
 
-/** Inner — useSidebar is always called, but only rendered when inside SidebarProvider. */
 function MenuButtonInner() {
   const { toggleSidebar } = useSidebar();
   return (
@@ -23,16 +16,16 @@ function MenuButtonInner() {
       type="button"
       onClick={toggleSidebar}
       aria-label="פתח תפריט"
-      className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-lg
-                 text-sidebar-foreground/70 hover:text-sidebar-foreground
-                 hover:bg-sidebar-accent transition-colors md:hidden"
+      className="flex-shrink-0 flex items-center justify-center h-9 w-9 rounded-lg
+                 text-sidebar-foreground/60 hover:text-sidebar-foreground
+                 hover:bg-sidebar-accent active:bg-sidebar-accent/80 active:scale-90
+                 transition-all duration-[120ms] md:hidden"
     >
       <Menu className="h-5 w-5" />
     </button>
   );
 }
 
-/** Safe wrapper — only mounts the inner component when inside AppLayout/SidebarProvider. */
 function MenuButton() {
   const inLayout = useInAppLayout();
   if (!inLayout) return null;
@@ -40,17 +33,11 @@ function MenuButton() {
 }
 
 interface PageHeaderProps {
-  /** Main page title (Hebrew or English). */
   title: ReactNode;
-  /** Small context line rendered below the title. */
   subtitle?: string;
-  /** Called when the back button is tapped. Omit to hide the button. */
   onBack?: () => void;
-  /** Label shown next to the back arrow on sm+ screens. Default "חזרה". */
   backLabel?: string;
-  /** Action buttons rendered at the logical end of the row. */
   actions?: ReactNode;
-  /** Slot rendered below the main row — used for the progress bar strip. */
   bottomSlot?: ReactNode;
   className?: string;
 }
@@ -66,22 +53,25 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header
-      className={`bg-sidebar text-sidebar-foreground border-b border-sidebar-border sticky top-0 z-20 w-full ${className}`}
+      className={`bg-sidebar text-sidebar-foreground sticky top-0 z-20 w-full
+                  shadow-[0_1px_0_0_rgba(255,252,245,0.08),0_2px_8px_-2px_rgba(51,61,54,0.35)]
+                  ${className}`}
     >
       <div dir="rtl" className={`px-3 sm:px-4 flex items-center gap-2 ${subtitle ? 'h-16' : 'h-14'}`}>
 
-        {/* ── Mobile menu trigger — first in RTL flex = physical RIGHT ── */}
+        {/* Mobile menu trigger */}
         <MenuButton />
 
-        {/* ── Back button ──────────────────────────────────────── */}
+        {/* Back button */}
         {onBack && (
           <>
             <button
               type="button"
               onClick={onBack}
-              className="flex-shrink-0 flex items-center gap-1.5 h-8 px-2.5 rounded-lg
+              className="flex-shrink-0 flex items-center gap-1.5 h-9 px-2.5 rounded-lg
                          text-sidebar-foreground/70 hover:text-sidebar-foreground
-                         hover:bg-sidebar-accent transition-colors"
+                         hover:bg-sidebar-accent active:bg-sidebar-accent/80 active:scale-95
+                         transition-all duration-[120ms]"
               aria-label="חזרה"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -91,26 +81,26 @@ export function PageHeader({
           </>
         )}
 
-        {/* ── Title block ──────────────────────────────────────── */}
+        {/* Title block */}
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
           <h1 className="text-base sm:text-lg font-extrabold tracking-tight truncate leading-tight">
             {title}
           </h1>
           {subtitle && (
-            <p className="text-xs text-sidebar-foreground/55 truncate leading-none font-medium">
+            <p className="text-[11px] text-sidebar-foreground/65 truncate leading-none font-medium tracking-wide">
               {subtitle}
             </p>
           )}
         </div>
 
-        {/* ── Action area ──────────────────────────────────────── */}
+        {/* Action area */}
         {actions && (
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {actions}
           </div>
         )}
 
-        {/* ── JAS wordmark ─────────────────────────────────────── */}
+        {/* JAS wordmark — desktop only */}
         <span
           className="hidden lg:block flex-shrink-0 text-[11px] font-display tracking-[0.18em]
                      text-sidebar-foreground/20 select-none pl-1"
@@ -120,7 +110,6 @@ export function PageHeader({
         </span>
       </div>
 
-      {/* ── Bottom slot (e.g. progress bar) ──────────────────── */}
       {bottomSlot}
     </header>
   );

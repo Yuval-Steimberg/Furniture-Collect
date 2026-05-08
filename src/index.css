@@ -203,10 +203,58 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
 
   .overflow-wrap-anywhere { overflow-wrap: anywhere; }
+
+  /* Shimmer loading skeleton — more premium than plain pulse */
+  .shimmer {
+    background: linear-gradient(
+      to right,
+      hsl(var(--muted)) 8%,
+      hsl(var(--background)) 20%,
+      hsl(var(--muted)) 33%
+    );
+    background-size: 1200px 100%;
+    animation: shimmer 1.8s linear infinite;
+  }
+
+  /* Card hover lift — subtle but consistent */
+  .card-interactive {
+    @apply transition-all duration-220 cursor-pointer;
+    @apply hover:shadow-card-hover hover:-translate-y-0.5;
+    @apply active:scale-[0.985] active:shadow-xs active:translate-y-0;
+  }
+
+  /* Tap feedback for mobile buttons */
+  .tap-target {
+    @apply active:opacity-80 active:scale-95 transition-all duration-[120ms];
+  }
+}
+
+/* Smooth scroll + momentum on iOS */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Remove mobile tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Better focus ring — warm orange, offset */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Text selection uses brand cream */
+::selection {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
 }
 
 /* Global scrollbar — warm, not default grey */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--jas-cream); }
-::-webkit-scrollbar-thumb { background: var(--jas-sage); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--jas-sage-3); }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: hsl(var(--background)); }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--accent)); }
