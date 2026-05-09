@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { SkeletonItemRow } from '@/components/SkeletonCard';
 import { SwipeableRow } from '@/components/SwipeableRow';
 import { GuidedWalkthrough } from '@/components/GuidedWalkthrough';
+import { PhotoAnnotation } from '@/components/PhotoAnnotation';
 
 // ---------- image helpers (scan flow) ------------------------------------
 // Resize to `maxLongSide` and encode as JPEG at `quality`. Keeps payloads
@@ -169,6 +170,9 @@ export default function ApartmentDetail() {
   const [showCamera, setShowCamera] = useState(false);
   const isMobile = useIsMobile();
 
+  // Photo annotation overlay
+  const [annotatingItem, setAnnotatingItem] = useState<Item | null>(null);
+
   useEffect(() => {
     loadData();
     loadUserRole();
@@ -241,6 +245,23 @@ export default function ApartmentDetail() {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+  const handleAnnotationSave = async (blob: Blob, item: Item) => {
+    try {
+      const photoUuid = crypto.randomUUID();
+      const path = `${projectId}/${apartmentId}/${photoUuid}-annotated.jpg`;
+      const { error: uploadError } = await supabase.storage.from('item-photos').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: publicData } = supabase.storage.from('item-photos').getPublicUrl(path);
+      const newUrl = publicData.publicUrl;
+      const existingUrls: string[] = item.photo_urls?.length ? item.photo_urls : item.image_url ? [item.image_url] : [];
+      const allUrls = [newUrl, ...existingUrls];
+      await supabase.from('items').update({ photo_urls: allUrls, image_url: newUrl } as any).eq('id', item.id);
+      toast.success('הערה נשמרה על התמונה');
+      await loadData();
+    } catch (err: any) {
+      toast.error('שגיאה בשמירת ההערה');
     }
   };
   const toggleRecording = async () => {
