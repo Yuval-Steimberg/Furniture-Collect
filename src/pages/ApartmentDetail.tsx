@@ -1569,6 +1569,14 @@ export default function ApartmentDetail() {
                                     {item.photo_urls!.length}
                                   </span>
                                 )}
+                                <button
+                                  type="button"
+                                  aria-label="ציור על תמונה"
+                                  onClick={e => { e.stopPropagation(); setAnnotatingItem(item); }}
+                                  className="absolute bottom-0 left-0 h-5 w-5 flex items-center justify-center rounded-tr bg-background/80 backdrop-blur-sm text-foreground hover:text-primary transition-colors"
+                                >
+                                  <Pen className="h-3 w-3" />
+                                </button>
                               </button>
                             )}
                     <div className="flex-1 min-w-0">
@@ -2282,7 +2290,7 @@ export default function ApartmentDetail() {
               האם אתה בטוח שברצונך למחוק פריט זה? פעולה זו אינה ניתנת לביטול.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => {
             setShowDeleteDialog(false);
@@ -2296,5 +2304,12 @@ export default function ApartmentDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <PhotoAnnotation
+        open={annotatingItem !== null}
+        imageUrl={annotatingItem?.image_url ?? annotatingItem?.photo_urls?.[0] ?? ''}
+        onClose={() => setAnnotatingItem(null)}
+        onSave={(blob) => { if (annotatingItem) handleAnnotationSave(blob, annotatingItem); }}
+      />
     </div>;
 }
