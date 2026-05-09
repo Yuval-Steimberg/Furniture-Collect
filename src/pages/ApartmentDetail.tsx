@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, type ChangeEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { addRecording, addImage } from '@/lib/offlineQueue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2, List, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2, List, LayoutGrid, Pen } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CameraCapture } from '@/components/CameraCapture';
 import { toast } from 'sonner';
@@ -307,7 +308,24 @@ export default function ApartmentDetail() {
   };
   const processAudio = async (audioBlob: Blob) => {
     setProcessing(true);
-    
+
+    if (!navigator.onLine) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await addRecording({
+          id: crypto.randomUUID(),
+          apartment_id: apartmentId!,
+          project_id: projectId!,
+          user_id: user.id,
+          audio_blob: audioBlob,
+          recorded_at: Date.now(),
+        });
+      }
+      toast.info('אין חיבור לרשת — ההקלטה נשמרה ותסונכרן בחזרה לרשת');
+      setProcessing(false);
+      return;
+    }
+
     try {
       // Convert to base64 efficiently
       const reader = new FileReader();
@@ -460,6 +478,24 @@ export default function ApartmentDetail() {
 
   const handleCameraCapture = async (file: File) => {
     setScanning(true);
+
+    if (!navigator.onLine) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await addImage({
+          id: crypto.randomUUID(),
+          apartment_id: apartmentId!,
+          project_id: projectId!,
+          user_id: user.id,
+          image_blob: file,
+          captured_at: Date.now(),
+        });
+      }
+      toast.info('אין חיבור לרשת — התמונה נשמרה ותסונכרן בחזרה לרשת');
+      setScanning(false);
+      return;
+    }
+
     try {
       const compressed = await compressImageToJpeg(file, 1024, 0.78);
       const base64 = await blobToBase64(compressed);
@@ -509,6 +545,24 @@ export default function ApartmentDetail() {
       return;
     }
     setScanning(true);
+
+    if (!navigator.onLine) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await addImage({
+          id: crypto.randomUUID(),
+          apartment_id: apartmentId!,
+          project_id: projectId!,
+          user_id: user.id,
+          image_blob: file,
+          captured_at: Date.now(),
+        });
+      }
+      toast.info('אין חיבור לרשת — התמונה נשמרה ותסונכרן בחזרה לרשת');
+      setScanning(false);
+      return;
+    }
+
     try {
       const compressed = await compressImageToJpeg(file, 1024, 0.78);
       const base64 = await blobToBase64(compressed);

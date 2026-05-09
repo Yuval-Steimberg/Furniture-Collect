@@ -4,6 +4,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { AIAssistant } from '@/components/AIAssistant';
 import { CommandPalette } from '@/components/CommandPalette';
 import { OfflineBadge } from '@/components/OfflineBadge';
+import { useOfflineSync } from '@/hooks/useOfflineSync';
 
 // Context so PageHeader can detect it's inside AppLayout and show the menu button
 export const InAppLayoutContext = createContext(false);
@@ -14,6 +15,7 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  useOfflineSync();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
