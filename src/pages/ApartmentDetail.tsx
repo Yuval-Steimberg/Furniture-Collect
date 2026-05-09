@@ -5,11 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2, List, LayoutGrid } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { CameraCapture } from '@/components/CameraCapture';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
@@ -160,6 +163,10 @@ export default function ApartmentDetail() {
   // Gallery/list view toggle + building siblings for navigation
   const [viewMode, setViewMode] = useState<'list' | 'gallery'>('list');
   const [buildingApts, setBuildingApts] = useState<Array<{id: string, apartment_number: string}>>([]);
+
+  // In-app camera overlay (desktop; mobile uses OS camera via file input)
+  const [showCamera, setShowCamera] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     loadData();
@@ -444,7 +451,53 @@ export default function ApartmentDetail() {
   // ---- Camera + vision autofill ----------------------------------------
   const openCameraPicker = () => {
     if (scanning || processing || recording) return;
-    fileInputRef.current?.click();
+    if (!isMobile && navigator.mediaDevices?.getUserMedia) {
+      setShowCamera(true);
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleCameraCapture = async (file: File) => {
+    setScanning(true);
+    try {
+      const compressed = await compressImageToJpeg(file, 1024, 0.78);
+      const base64 = await blobToBase64(compressed);
+      const { data: parseData, error: parseError } = await supabase.functions.invoke('parse-image-item', {
+        body: { image_base64: base64, apartment_id: apartmentId },
+      });
+      if (parseError) throw parseError;
+      const parsed = parseData?.item;
+      if (!parsed?.description) throw new Error('AI לא זיהה פריט');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not found');
+      const photoUuid = crypto.randomUUID();
+      const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+      const { error: uploadError } = await supabase.storage.from('item-photos').upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: publicData } = supabase.storage.from('item-photos').getPublicUrl(path);
+      const payload: any = {
+        apartment_id: apartmentId, project_id: projectId,
+        description: parsed.description, quantity: parsed.quantity ?? 1,
+        location: parsed.location ?? null,
+        intended_for_collection: parsed.intended_for_collection ?? true,
+        item_type: parsed.item_type ?? 'furniture',
+        material_category: parsed.material_category ?? 'other',
+        estimated_weight_kg: parsed.estimated_weight_kg ?? null,
+        ai_confidence: parsed.confidence ?? null,
+        image_url: publicData.publicUrl, photo_urls: [publicData.publicUrl],
+        source: 'image', created_by_user_id: user.id,
+      };
+      const { data: inserted, error: insertError } = await supabase.from('items').insert(payload).select('id');
+      if (insertError) throw insertError;
+      pushUndo((inserted ?? []).map((r: any) => r.id));
+      toast.success(`${parsed.description} זוהה ונוסף`);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'שגיאה בסריקת התמונה');
+    } finally {
+      setScanning(false);
+    }
   };
   const handleImageCapture = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1848,7 +1901,76 @@ export default function ApartmentDetail() {
       )}
 
 
-      {/* Edit Item Dialog */}
+      {/* In-app camera overlay — desktop getUserMedia flow */}
+      <CameraCapture
+        open={showCamera}
+        onClose={() => setShowCamera(false)}
+        onCapture={handleCameraCapture}
+      />
+
+      {/* Edit Item — Drawer on mobile, Dialog on desktop */}
+      {isMobile ? (
+        <Drawer open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DrawerContent dir="rtl" className="px-4 pb-6">
+            <DrawerHeader className="text-right">
+              <DrawerTitle>עריכת פריט</DrawerTitle>
+            </DrawerHeader>
+            {editingItem && <div className="space-y-4 overflow-y-auto max-h-[65vh]">
+              <div>
+                <Label>תיאור</Label>
+                <Input value={editingItem.description} onChange={e => setEditingItem({ ...editingItem, description: e.target.value })} />
+              </div>
+              <div>
+                <Label>כמות</Label>
+                <Input type="number" value={editingItem.quantity} onChange={e => setEditingItem({ ...editingItem, quantity: parseInt(e.target.value) || 1 })} />
+              </div>
+              <div>
+                <Label>מיקום</Label>
+                <Input value={editingItem.location || ''} onChange={e => setEditingItem({ ...editingItem, location: e.target.value })} />
+              </div>
+              <div>
+                <Label>סוג פריט</Label>
+                <Select value={editingItem.item_type} onValueChange={value => setEditingItem({ ...editingItem, item_type: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="furniture">רהיט</SelectItem>
+                    <SelectItem value="appliance">מכשיר חשמלי</SelectItem>
+                    <SelectItem value="textile">טקסטיל</SelectItem>
+                    <SelectItem value="small_item">פריט קטן</SelectItem>
+                    <SelectItem value="other">אחר</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>קטגוריית חומר</Label>
+                <Select value={editingItem.material_category} onValueChange={value => setEditingItem({ ...editingItem, material_category: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="glass">זכוכית</SelectItem>
+                    <SelectItem value="aluminum">אלומיניום</SelectItem>
+                    <SelectItem value="wood">עץ</SelectItem>
+                    <SelectItem value="plastic">פלסטיק</SelectItem>
+                    <SelectItem value="metal">מתכת</SelectItem>
+                    <SelectItem value="textile">טקסטיל</SelectItem>
+                    <SelectItem value="electrical">חשמלי</SelectItem>
+                    <SelectItem value="other">אחר</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={() => { updateItem(editingItem.id, { description: editingItem.description, quantity: editingItem.quantity, location: editingItem.location, item_type: editingItem.item_type, material_category: editingItem.material_category }); setShowEditDialog(false); }} className="w-full">
+                שמור שינויים
+              </Button>
+              <Button type="button" variant="outline" onClick={async () => { if (!editingItem) return; await estimateResale(editingItem); setShowEditDialog(false); }} className="w-full gap-2">
+                <DollarSign className="h-4 w-4" />
+                הערכת שווי (AI)
+                {typeof editingItem.estimated_resale_ils === 'number' && editingItem.estimated_resale_ils > 0 && (
+                  <span className="text-xs text-muted-foreground">· נוכחי: ₪{editingItem.estimated_resale_ils}</span>
+                )}
+              </Button>
+            </div>}
+          </DrawerContent>
+        </Drawer>
+      ) : (
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent dir="rtl">
           <DialogHeader>
@@ -1948,6 +2070,7 @@ export default function ApartmentDetail() {
             </div>}
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Manual Entry Dialog */}
       <Dialog open={showManualDialog} onOpenChange={setShowManualDialog}>
