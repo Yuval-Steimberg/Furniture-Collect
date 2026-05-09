@@ -13,10 +13,11 @@ import { SkeletonStatCard, SkeletonProjectCard } from '@/components/SkeletonCard
 import { EmptyState } from '@/components/EmptyState';
 import {
   Package, Leaf, Building2, TrendingUp, Plus,
-  ArrowLeft, Clock, Sparkles, Menu,
+  ArrowLeft, Clock, Sparkles, Menu, Search,
 } from 'lucide-react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { summarise, formatKg, formatCO2, type ReportItem } from '@/lib/sustainability';
+import { useCountUp } from '@/hooks/useCountUp';
 
 function DashboardMenuButton() {
   const { toggleSidebar } = useSidebar();
@@ -125,6 +126,11 @@ export default function Dashboard() {
     }
   };
 
+  // Count-up animation for hero stats — animate from 0 to actual value on data load
+  const animApartments = useCountUp(totals.apartmentCount, { enabled: !loading });
+  const animItems = useCountUp(totals.itemCount, { enabled: !loading });
+  const animCollected = useCountUp(totals.collectedCount, { enabled: !loading });
+
   const greet = (() => {
     const h = new Date().getHours();
     if (h < 12) return 'בוקר טוב';
@@ -153,7 +159,7 @@ export default function Dashboard() {
           {totals.itemCount > 0 ? (
             <div className="mb-2">
               <div className="text-5xl font-extrabold tracking-tight leading-none text-primary">
-                {totals.itemCount}
+                {animItems}
               </div>
               <div className="text-xl font-bold text-sidebar-foreground mt-1">
                 פריטים רשומים
@@ -172,9 +178,9 @@ export default function Dashboard() {
           <p className="text-sm text-sidebar-foreground/70">
             {totals.itemCount > 0 ? (
               <>
-                {totals.collectedCount} נאספו
+                {animCollected} נאספו
                 <span className="mx-1.5 opacity-40">·</span>
-                {totals.itemCount - totals.collectedCount} ממתינים
+                {animItems - animCollected} ממתינים
                 {totals.diverted_kg > 0 && (
                   <>
                     <span className="mx-1.5 opacity-40">·</span>
@@ -186,6 +192,16 @@ export default function Dashboard() {
               `${totals.projectCount} פרויקטים · התחל בתיעוד פריטים`
             )}
           </p>
+
+          {/* Quick search hint */}
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors rounded-lg border border-sidebar-foreground/10 hover:border-sidebar-foreground/20 px-2.5 py-1"
+          >
+            <Search className="h-3.5 w-3.5" />
+            חיפוש מהיר
+            <kbd className="font-mono bg-sidebar-foreground/10 px-1 rounded text-[10px]">⌘K</kbd>
+          </button>
         </div>
       </section>
 
@@ -233,8 +249,8 @@ export default function Dashboard() {
               {[
                 { label: 'הופנו מהטמנה', value: formatKg(totals.diverted_kg), sub: `${totals.collectedCount} נאספו`, icon: Leaf, accent: 'sage' as const },
                 { label: 'CO₂ נחסך', value: formatCO2(totals.co2_saved_kg), sub: 'על פני כל הפרויקטים', icon: TrendingUp, accent: 'orange' as const },
-                { label: 'דירות תועדו', value: totals.apartmentCount, sub: `${totals.projectCount} ${totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}`, icon: Building2, accent: 'slate' as const },
-                { label: 'פריטים', value: totals.itemCount, sub: `${totals.itemCount - totals.collectedCount} ממתינים`, icon: Package, accent: 'slate' as const },
+                { label: 'דירות תועדו', value: animApartments, sub: `${totals.projectCount} ${totals.projectCount === 1 ? 'פרויקט' : 'פרויקטים'}`, icon: Building2, accent: 'slate' as const },
+                { label: 'פריטים', value: animItems, sub: `${animItems - animCollected} ממתינים`, icon: Package, accent: 'slate' as const },
               ].map(card => (
                 <motion.div
                   key={card.label}

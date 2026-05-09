@@ -5,11 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2 } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2, List, LayoutGrid } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { CameraCapture } from '@/components/CameraCapture';
 import { toast } from 'sonner';
 import { useUndoStack } from '@/hooks/use-undo-stack';
 import { UndoFlyout } from '@/components/UndoFlyout';
@@ -156,9 +159,30 @@ export default function ApartmentDetail() {
   // Multi-photo gallery upload (creates new items)
   const [multiUploading, setMultiUploading] = useState(false);
   const [multiUploadProgress, setMultiUploadProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Gallery/list view toggle + building siblings for navigation
+  const [viewMode, setViewMode] = useState<'list' | 'gallery'>('list');
+  const [buildingApts, setBuildingApts] = useState<Array<{id: string, apartment_number: string}>>([]);
+
+  // In-app camera overlay (desktop; mobile uses OS camera via file input)
+  const [showCamera, setShowCamera] = useState(false);
+  const isMobile = useIsMobile();
+
   useEffect(() => {
     loadData();
     loadUserRole();
+  }, [apartmentId]);
+
+  // Realtime subscription — reload items on any change in this apartment
+  useEffect(() => {
+    if (!apartmentId) return;
+    const channel = supabase
+      .channel(`items-rt-${apartmentId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `apartment_id=eq.${apartmentId}` },
+        () => { void loadData(); }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
   }, [apartmentId]);
   const loadUserRole = async () => {
     try {
@@ -184,6 +208,14 @@ export default function ApartmentDetail() {
       } = await supabase.from('apartments').select('*, projects(name)').eq('id', apartmentId).single();
       if (apartmentError) throw apartmentError;
       setApartmentInfo(apartment);
+      // Load sibling apartments for prev/next navigation
+      const { data: siblings } = await supabase
+        .from('apartments')
+        .select('id,apartment_number')
+        .eq('project_id', projectId!)
+        .eq('building_number', apartment.building_number)
+        .order('apartment_number');
+      setBuildingApts(siblings ?? []);
       let { data: itemsData, error: itemsError } = await supabase.from('items').select(`
           *,
           created_by:profiles!items_created_by_user_id_fkey(name),
@@ -419,7 +451,53 @@ export default function ApartmentDetail() {
   // ---- Camera + vision autofill ----------------------------------------
   const openCameraPicker = () => {
     if (scanning || processing || recording) return;
-    fileInputRef.current?.click();
+    if (!isMobile && navigator.mediaDevices?.getUserMedia) {
+      setShowCamera(true);
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleCameraCapture = async (file: File) => {
+    setScanning(true);
+    try {
+      const compressed = await compressImageToJpeg(file, 1024, 0.78);
+      const base64 = await blobToBase64(compressed);
+      const { data: parseData, error: parseError } = await supabase.functions.invoke('parse-image-item', {
+        body: { image_base64: base64, apartment_id: apartmentId },
+      });
+      if (parseError) throw parseError;
+      const parsed = parseData?.item;
+      if (!parsed?.description) throw new Error('AI לא זיהה פריט');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not found');
+      const photoUuid = crypto.randomUUID();
+      const path = `${projectId}/${apartmentId}/${photoUuid}.jpg`;
+      const { error: uploadError } = await supabase.storage.from('item-photos').upload(path, compressed, { contentType: 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: publicData } = supabase.storage.from('item-photos').getPublicUrl(path);
+      const payload: any = {
+        apartment_id: apartmentId, project_id: projectId,
+        description: parsed.description, quantity: parsed.quantity ?? 1,
+        location: parsed.location ?? null,
+        intended_for_collection: parsed.intended_for_collection ?? true,
+        item_type: parsed.item_type ?? 'furniture',
+        material_category: parsed.material_category ?? 'other',
+        estimated_weight_kg: parsed.estimated_weight_kg ?? null,
+        ai_confidence: parsed.confidence ?? null,
+        image_url: publicData.publicUrl, photo_urls: [publicData.publicUrl],
+        source: 'image', created_by_user_id: user.id,
+      };
+      const { data: inserted, error: insertError } = await supabase.from('items').insert(payload).select('id');
+      if (insertError) throw insertError;
+      pushUndo((inserted ?? []).map((r: any) => r.id));
+      toast.success(`${parsed.description} זוהה ונוסף`);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'שגיאה בסריקת התמונה');
+    } finally {
+      setScanning(false);
+    }
   };
   const handleImageCapture = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -935,7 +1013,10 @@ export default function ApartmentDetail() {
       await supabase.from('apartments').update({ status: 'COMPLETED' }).eq('id', apartmentId);
       const { data: apartment } = await supabase
         .from('apartments').select('*, projects(name)').eq('id', apartmentId).single();
-      if (apartment) setApartmentInfo(apartment);
+      if (apartment) {
+        setApartmentInfo(apartment);
+        toast.success('🎉 כל הפריטים נאספו! הדירה הושלמה.', { duration: 4000 });
+      }
     } catch (err) {
       console.warn('apartment completion check skipped:', err);
     }
@@ -1080,6 +1161,12 @@ export default function ApartmentDetail() {
     };
     return badges[status as keyof typeof badges];
   };
+
+  // Prev/next apartment in same building
+  const currentAptIdx = buildingApts.findIndex(a => a.id === apartmentId);
+  const prevApt = currentAptIdx > 0 ? buildingApts[currentAptIdx - 1] : null;
+  const nextApt = currentAptIdx < buildingApts.length - 1 ? buildingApts[currentAptIdx + 1] : null;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-muted" dir="rtl">
@@ -1131,6 +1218,31 @@ export default function ApartmentDetail() {
       />
 
       <main className="px-3 sm:px-4 py-4 sm:py-6 w-full">
+        {/* Apartment navigation — prev/next within same building */}
+        {(prevApt || nextApt) && (
+          <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
+            <button
+              type="button"
+              onClick={() => prevApt && navigate(`/projects/${projectId}/apartments/${prevApt.id}`)}
+              disabled={!prevApt}
+              className="flex items-center gap-1 h-7 px-2 rounded-md hover:bg-muted disabled:opacity-30 transition-colors active:scale-95"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
+              <span>דירה {prevApt?.apartment_number}</span>
+            </button>
+            <span className="text-[10px] font-semibold tabular-nums">{currentAptIdx + 1} / {buildingApts.length} בבניין</span>
+            <button
+              type="button"
+              onClick={() => nextApt && navigate(`/projects/${projectId}/apartments/${nextApt.id}`)}
+              disabled={!nextApt}
+              className="flex items-center gap-1 h-7 px-2 rounded-md hover:bg-muted disabled:opacity-30 transition-colors active:scale-95"
+            >
+              <span>דירה {nextApt?.apartment_number}</span>
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Smart search — natural language filter over items */}
         <div className="w-full mb-3">
           <form onSubmit={e => { e.preventDefault(); void runSmartSearch(); }} className="flex gap-2">
@@ -1196,6 +1308,19 @@ export default function ApartmentDetail() {
             </Button>
             <Button variant={filter === 'no_collection' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('no_collection')} className="h-9 text-xs sm:text-sm whitespace-nowrap flex-shrink-0">רק תיעוד ({items.filter(i => !i.intended_for_collection).length})
             </Button>
+            {/* View mode toggle */}
+            <div className="flex-shrink-0 flex border border-border rounded-lg overflow-hidden mr-auto">
+              <button type="button" onClick={() => setViewMode('list')}
+                className={`h-9 w-9 flex items-center justify-center transition-colors ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                title="תצוגת רשימה" aria-label="תצוגת רשימה">
+                <List className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => setViewMode('gallery')}
+                className={`h-9 w-9 flex items-center justify-center transition-colors ${viewMode === 'gallery' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                title="גלריית תמונות" aria-label="גלריית תמונות">
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1214,6 +1339,54 @@ export default function ApartmentDetail() {
             <Button size="sm" variant="ghost" onClick={exitBulkMode} className="h-8 w-8 p-0 text-background hover:bg-background/10">
               <X className="h-4 w-4" />
             </Button>
+          </div>
+        )}
+
+        {/* Gallery view — photo grid for visually browsing items */}
+        {viewMode === 'gallery' && !loading && filteredItems.length > 0 && (
+          <div className="mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {filteredItems
+                .filter(i => i.image_url || (i.photo_urls?.length ?? 0) > 0)
+                .map(item => {
+                  const photoIdx = photoItems.findIndex(p => p.id === item.id && (p as any)._photoIdx === 0);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setLightboxIndex(photoIdx >= 0 ? photoIdx : 0)}
+                      className="relative rounded-xl overflow-hidden aspect-square bg-muted group active:scale-95 transition-transform duration-150"
+                    >
+                      <img
+                        src={item.photo_urls?.[0] ?? item.image_url!}
+                        alt={item.description}
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                      <div className="absolute bottom-0 inset-x-0 p-2 text-right">
+                        <p className="text-white text-xs font-semibold line-clamp-2 leading-tight">{item.description}</p>
+                        {item.location && <p className="text-white/70 text-[10px]">{item.location}</p>}
+                        {item.collected && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] bg-emerald-500 text-white rounded-full px-1.5 py-0.5 mt-0.5">
+                            <Check className="h-2.5 w-2.5" strokeWidth={2.5} /> נאסף
+                          </span>
+                        )}
+                      </div>
+                      {(item.photo_urls?.length ?? 0) > 1 && (
+                        <span className="absolute top-1.5 left-1.5 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                          {item.photo_urls!.length}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
+            {filteredItems.filter(i => !i.image_url && !(i.photo_urls?.length)).length > 0 && (
+              <p className="text-xs text-muted-foreground text-center mt-3">
+                {filteredItems.filter(i => !i.image_url && !(i.photo_urls?.length)).length} פריטים ללא תמונה — עבור לתצוגת רשימה לעריכתם
+              </p>
+            )}
           </div>
         )}
 
@@ -1237,7 +1410,7 @@ export default function ApartmentDetail() {
               />
             </CardContent>
           </Card>
-        ) : (
+        ) : viewMode === 'list' ? (
         <div className="space-y-4 w-full">
           {groupedItems.map(([loc, locItems]) => {
             const isCollapsed = collapsedLocations.has(loc);
@@ -1452,7 +1625,7 @@ export default function ApartmentDetail() {
           );
           })}
         </div>
-        )}
+        ) : null}
       </main>
 
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg">
@@ -1728,7 +1901,76 @@ export default function ApartmentDetail() {
       )}
 
 
-      {/* Edit Item Dialog */}
+      {/* In-app camera overlay — desktop getUserMedia flow */}
+      <CameraCapture
+        open={showCamera}
+        onClose={() => setShowCamera(false)}
+        onCapture={handleCameraCapture}
+      />
+
+      {/* Edit Item — Drawer on mobile, Dialog on desktop */}
+      {isMobile ? (
+        <Drawer open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DrawerContent dir="rtl" className="px-4 pb-6">
+            <DrawerHeader className="text-right">
+              <DrawerTitle>עריכת פריט</DrawerTitle>
+            </DrawerHeader>
+            {editingItem && <div className="space-y-4 overflow-y-auto max-h-[65vh]">
+              <div>
+                <Label>תיאור</Label>
+                <Input value={editingItem.description} onChange={e => setEditingItem({ ...editingItem, description: e.target.value })} />
+              </div>
+              <div>
+                <Label>כמות</Label>
+                <Input type="number" value={editingItem.quantity} onChange={e => setEditingItem({ ...editingItem, quantity: parseInt(e.target.value) || 1 })} />
+              </div>
+              <div>
+                <Label>מיקום</Label>
+                <Input value={editingItem.location || ''} onChange={e => setEditingItem({ ...editingItem, location: e.target.value })} />
+              </div>
+              <div>
+                <Label>סוג פריט</Label>
+                <Select value={editingItem.item_type} onValueChange={value => setEditingItem({ ...editingItem, item_type: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="furniture">רהיט</SelectItem>
+                    <SelectItem value="appliance">מכשיר חשמלי</SelectItem>
+                    <SelectItem value="textile">טקסטיל</SelectItem>
+                    <SelectItem value="small_item">פריט קטן</SelectItem>
+                    <SelectItem value="other">אחר</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>קטגוריית חומר</Label>
+                <Select value={editingItem.material_category} onValueChange={value => setEditingItem({ ...editingItem, material_category: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="glass">זכוכית</SelectItem>
+                    <SelectItem value="aluminum">אלומיניום</SelectItem>
+                    <SelectItem value="wood">עץ</SelectItem>
+                    <SelectItem value="plastic">פלסטיק</SelectItem>
+                    <SelectItem value="metal">מתכת</SelectItem>
+                    <SelectItem value="textile">טקסטיל</SelectItem>
+                    <SelectItem value="electrical">חשמלי</SelectItem>
+                    <SelectItem value="other">אחר</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={() => { updateItem(editingItem.id, { description: editingItem.description, quantity: editingItem.quantity, location: editingItem.location, item_type: editingItem.item_type, material_category: editingItem.material_category }); setShowEditDialog(false); }} className="w-full">
+                שמור שינויים
+              </Button>
+              <Button type="button" variant="outline" onClick={async () => { if (!editingItem) return; await estimateResale(editingItem); setShowEditDialog(false); }} className="w-full gap-2">
+                <DollarSign className="h-4 w-4" />
+                הערכת שווי (AI)
+                {typeof editingItem.estimated_resale_ils === 'number' && editingItem.estimated_resale_ils > 0 && (
+                  <span className="text-xs text-muted-foreground">· נוכחי: ₪{editingItem.estimated_resale_ils}</span>
+                )}
+              </Button>
+            </div>}
+          </DrawerContent>
+        </Drawer>
+      ) : (
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent dir="rtl">
           <DialogHeader>
@@ -1828,6 +2070,7 @@ export default function ApartmentDetail() {
             </div>}
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Manual Entry Dialog */}
       <Dialog open={showManualDialog} onOpenChange={setShowManualDialog}>
@@ -1845,6 +2088,22 @@ export default function ApartmentDetail() {
             </div> : <div className="space-y-4">
               <div>
                 <Label>תיאור הפריטים *</Label>
+                {/* Quick-insert templates */}
+                <div className="mt-1.5 mb-2">
+                  <p className="text-[11px] text-muted-foreground mb-1.5">הוספה מהירה:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['ספה תלת-מושבית','מיטה זוגית עם מזרן','ארון בגדים','שולחן אוכל עם כסאות','מקרר','מכונת כביסה','ספת שינה','שולחן קפה','כוננית ספרים','מנורה עמידה','מכשיר טלוויזיה','מזגן','כיסא משרדי','מיטת יחיד','שולחן כתיבה'].map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setManualItem(prev => ({ description: prev.description ? `${prev.description}\n${t}` : t }))}
+                        className="text-xs px-2.5 py-1 rounded-full border border-border bg-muted hover:bg-accent/40 hover:border-accent transition-colors"
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <textarea value={manualItem.description} onChange={e => setManualItem({
               description: e.target.value
             })} placeholder="לדוגמה: 2 שולחנות 3 כסאות שטיח בסלון מקרר לא לקחת" className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm" dir="rtl" />

@@ -24,6 +24,7 @@ import AcceptInvitation from "./pages/AcceptInvitation";
 import DataExplorer from "./pages/DataExplorer";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import CollectionPrep from "./pages/CollectionPrep";
+import LiveReport from "./pages/LiveReport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ function AnimatedRoutes() {
         <Route path="/projects/:projectId/apartments/:apartmentId" element={<AppLayout><PageTransition><ApartmentDetail /></PageTransition></AppLayout>} />
         <Route path="/projects/:projectId/statistics" element={<AppLayout><PageTransition><Statistics /></PageTransition></AppLayout>} />
         <Route path="/projects/:projectId/report" element={<PageTransition><SustainabilityReport /></PageTransition>} />
+        <Route path="/share/:projectId" element={<PageTransition><LiveReport /></PageTransition>} />
         <Route path="/projects/:projectId/users" element={<AppLayout><PageTransition><ProjectUsers /></PageTransition></AppLayout>} />
         <Route path="/projects/:projectId/preparation" element={<AppLayout><PageTransition><CollectionPrep /></PageTransition></AppLayout>} />
         <Route path="/global-statistics" element={<AppLayout><PageTransition><GlobalStatistics /></PageTransition></AppLayout>} />

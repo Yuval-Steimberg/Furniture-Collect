@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package, Search, ChevronsDownUp, ChevronsUpDown, X, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Plus, Building2, BarChart3, ChevronDown, ChevronUp, Users, Check, FileText, Home, Package, Search, ChevronsDownUp, ChevronsUpDown, X, ClipboardList, Share2 } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonProjectCard } from '@/components/SkeletonCard';
 import { PageHeader } from '@/components/PageHeader';
@@ -52,6 +52,21 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     loadData();
+  }, [projectId]);
+
+  // Live updates: re-load when apartments or items change in this project
+  useEffect(() => {
+    if (!projectId) return;
+    const channel = supabase
+      .channel(`project-rt-${projectId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `project_id=eq.${projectId}` },
+        () => { void loadData(); }
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'apartments', filter: `project_id=eq.${projectId}` },
+        () => { void loadData(); }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
   }, [projectId]);
 
   const loadData = async () => {
@@ -128,11 +143,19 @@ export default function ProjectDetail() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'NOT_STARTED':
-        return <Badge variant="secondary">לא הושלם</Badge>;
+        return <Badge variant="secondary" className="text-[10px] px-1.5">לא הושלם</Badge>;
       case 'DOCUMENTING':
-        return <Badge className="bg-warning text-warning-foreground">בתיעוד</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1">
+            <Badge className="bg-warning text-warning-foreground text-[10px] px-1.5">בתיעוד</Badge>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-warning" />
+            </span>
+          </span>
+        );
       case 'COMPLETED':
-        return <Badge className="bg-success text-success-foreground">הושלם</Badge>;
+        return <Badge className="bg-success text-success-foreground text-[10px] px-1.5">הושלם</Badge>;
       default:
         return null;
     }
@@ -209,6 +232,25 @@ export default function ProjectDetail() {
         onBack={() => navigate('/projects')}
         actions={
           <>
+            <span className="inline-flex items-center gap-1 text-[10px] text-success font-medium">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
+              </span>
+              חי
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                const url = `${window.location.origin}/share/${projectId}`;
+                navigator.clipboard.writeText(url).then(() => toast.success('קישור לדוח חי הועתק'));
+              }}
+              className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8"
+              title="שתף דוח חי"
+            >
+              <Share2 className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}/users`)} className="text-sidebar-foreground hover:bg-sidebar-accent h-8 w-8" title="ניהול משתמשים">
               <Users className="h-4 w-4" />
             </Button>
