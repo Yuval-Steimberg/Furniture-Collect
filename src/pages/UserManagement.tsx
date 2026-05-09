@@ -16,6 +16,7 @@ import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonStatCard, SkeletonProjectCard } from '@/components/SkeletonCard';
 import { PageHeader } from '@/components/PageHeader';
+import { WebhookManager } from '@/components/WebhookManager';
 
 interface UserWithProjects {
   id: string;
@@ -666,6 +667,9 @@ export default function UserManagement() {
             </CardContent>
           </Card>
         )}
+        <div className="mt-6">
+          <WebhookManager />
+        </div>
       </main>
 
       {/* Edit Org Role Dialog */}

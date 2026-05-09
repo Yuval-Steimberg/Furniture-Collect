@@ -24,6 +24,8 @@ import { SkeletonItemRow } from '@/components/SkeletonCard';
 import { SwipeableRow } from '@/components/SwipeableRow';
 import { GuidedWalkthrough } from '@/components/GuidedWalkthrough';
 import { PhotoAnnotation } from '@/components/PhotoAnnotation';
+import { logAudit } from '@/lib/auditLog';
+import { fireWebhooks } from '@/components/WebhookManager';
 
 // ---------- image helpers (scan flow) ------------------------------------
 // Resize to `maxLongSide` and encode as JPEG at `quality`. Keeps payloads
@@ -417,6 +419,15 @@ export default function ApartmentDetail() {
       if (error) throw error;
       pushUndo((inserted ?? []).map((r: any) => r.id));
       void runDuplicateCheck((inserted ?? []).map((r: any) => r.id));
+      void logAudit({
+        action: 'item_created',
+        entity_type: 'item',
+        entity_id: (inserted?.[0] as any)?.id ?? '',
+        entity_label: `${itemsToInsert.length} פריטים מהקלטה`,
+        project_id: projectId ?? null,
+        apartment_id: apartmentId ?? null,
+        actor_name: 'Worker',
+      });
 
       // Reload and reset state (the undo flyout replaces the success toast
       // for auto-inserts, so users can undo rather than just being told).
@@ -1091,6 +1102,12 @@ export default function ApartmentDetail() {
       if (apartment) {
         setApartmentInfo(apartment);
         toast.success('🎉 כל הפריטים נאספו! הדירה הושלמה.', { duration: 4000 });
+        void fireWebhooks({
+          event: 'apartment_completed',
+          project_id: projectId,
+          apartment_id: apartmentId,
+          timestamp: new Date().toISOString(),
+        });
       }
     } catch (err) {
       console.warn('apartment completion check skipped:', err);
@@ -1161,9 +1178,21 @@ export default function ApartmentDetail() {
     setShowAttributionDialog(false);
     const name = collectorInput.trim();
     if (name) localStorage.setItem('fc_last_collector', name);
-    await updateItem(pendingCollectionItemId, {
+    const collectedItemId = pendingCollectionItemId;
+    const collectedItem = items.find(i => i.id === collectedItemId);
+    await updateItem(collectedItemId, {
       collected: true,
       collected_by: name || null,
+    });
+    void logAudit({
+      action: 'item_collected',
+      entity_type: 'item',
+      entity_id: collectedItemId,
+      entity_label: collectedItem?.description ?? 'פריט',
+      project_id: projectId ?? null,
+      apartment_id: apartmentId ?? null,
+      actor_name: 'Worker',
+      meta: { collector: name || null },
     });
     setPendingCollectionItemId(null);
     setCollectorInput('');
