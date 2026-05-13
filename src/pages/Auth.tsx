@@ -8,6 +8,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Circle } from 'lucide-react';
+
+function translateAuthError(msg: string): string {
+  if (!msg) return 'שגיאה לא ידועה';
+  const m = msg.toLowerCase();
+  if (m.includes('rate limit') || m.includes('rate_limit') || m.includes('over_email_send_rate_limit'))
+    return 'הגעת למגבלת שליחת אימיילים — נסה שוב בעוד שעה, או בקש מהמנהל לכבות אישור אימייל בהגדרות Supabase.';
+  if (m.includes('already registered') || m.includes('already been registered') || m.includes('user already registered'))
+    return 'כתובת האימייל כבר רשומה — נסה להתחבר.';
+  if (m.includes('invalid login credentials') || m.includes('invalid_credentials'))
+    return 'אימייל או סיסמה שגויים.';
+  if (m.includes('email not confirmed'))
+    return 'האימייל טרם אומת — בדוק את תיבת הדואר שלך ולחץ על קישור האישור.';
+  if (m.includes('password should be at least'))
+    return 'הסיסמה חייבת להכיל לפחות 6 תווים.';
+  if (m.includes('unable to validate email') || m.includes('invalid email'))
+    return 'כתובת האימייל אינה תקינה.';
+  if (m.includes('signup is disabled') || m.includes('signups not allowed'))
+    return 'ההרשמה סגורה כרגע — פנה למנהל המערכת.';
+  if (m.includes('network') || m.includes('failed to fetch'))
+    return 'בעיית חיבור — בדוק את החיבור לאינטרנט ונסה שוב.';
+  return msg;
+}
+
 export default function Auth() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -40,22 +63,27 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
     try {
-      const {
-        error
-      } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: {
-            name
-          },
-          emailRedirectTo: `${window.location.origin}/projects`
-        }
+          data: { name },
+          emailRedirectTo: `${window.location.origin}/`,
+        },
       });
       if (error) throw error;
-      toast.success('חשבון נוצר בהצלחה! מתחבר...');
+
+      // If email confirmation is disabled in Supabase (recommended for internal tools),
+      // sign in immediately so the user doesn't have to wait for an email.
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (!signInError) {
+        toast.success('ברוך הבא! החשבון נוצר בהצלחה.');
+        // onAuthStateChange will navigate to /projects
+      } else {
+        toast.success('החשבון נוצר! בדוק את האימייל שלך לאישור ולאחר מכן התחבר.');
+      }
     } catch (error: any) {
-      toast.error(error.message || 'שגיאה בהרשמה');
+      toast.error(translateAuthError(error.message));
     } finally {
       setLoading(false);
     }
@@ -73,7 +101,7 @@ export default function Auth() {
       if (error) throw error;
       toast.success('מתחבר...');
     } catch (error: any) {
-      toast.error(error.message || 'שגיאה בהתחברות');
+      toast.error(translateAuthError(error.message));
     } finally {
       setLoading(false);
     }
