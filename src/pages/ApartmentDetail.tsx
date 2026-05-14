@@ -115,6 +115,7 @@ export default function ApartmentDetail() {
     description: ''
   });
   const [userRole, setUserRole] = useState<string>('');
+  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -203,6 +204,9 @@ export default function ApartmentDetail() {
         data: userProject
       } = await supabase.from('user_projects').select('project_role').eq('user_id', user.id).eq('project_id', projectId).single();
       setUserRole(userProject?.project_role || '');
+      // Load display name for auto-fill in collection attribution
+      const { data: profile } = await supabase.from('profiles').select('name').eq('id', user.id).single();
+      if (profile?.name) setCurrentUserName(profile.name);
     } catch (error) {
       console.error('Error loading user role:', error);
     }
@@ -1157,10 +1161,17 @@ export default function ApartmentDetail() {
       console.error(error);
     }
   };
+  // Immediately mark collected with the logged-in user's name — used for swipe-left
+  const quickCollect = async (itemId: string) => {
+    const name = currentUserName || localStorage.getItem('fc_last_collector') || '';
+    if (name) localStorage.setItem('fc_last_collector', name);
+    await updateItem(itemId, { collected: true, collected_by: name || null });
+  };
+
   // Show "נאסף על ידי מי?" dialog before marking collected
   const requestCollection = (itemId: string) => {
     setIsReattribution(false);
-    setCollectorInput(localStorage.getItem('fc_last_collector') || '');
+    setCollectorInput(currentUserName || localStorage.getItem('fc_last_collector') || '');
     setPendingCollectionItemId(itemId);
     setShowAttributionDialog(true);
   };
@@ -1285,7 +1296,7 @@ export default function ApartmentDetail() {
       </div>
     );
   }
-  return <div className="min-h-screen bg-muted pb-24 w-screen overflow-x-hidden" dir="rtl">
+  return <div className="min-h-screen bg-muted" dir="rtl">
       <PageHeader
         title={`בניין ${apartmentInfo?.building_number} · דירה ${apartmentInfo?.apartment_number}`}
         subtitle={apartmentInfo?.projects?.name}
@@ -1321,7 +1332,7 @@ export default function ApartmentDetail() {
         })()}
       />
 
-      <main className="px-3 sm:px-4 py-4 sm:py-6 w-full">
+      <main className="px-3 sm:px-4 py-4 sm:py-6 pb-32 w-full overflow-x-hidden">
         {/* Apartment navigation — prev/next within same building */}
         {(prevApt || nextApt) && (
           <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
@@ -1562,7 +1573,7 @@ export default function ApartmentDetail() {
                       collected={item.collected}
                       onDelete={() => { setDeletingItemId(item.id); setShowDeleteDialog(true); }}
                       onToggleCollected={() => {
-                        if (!item.collected) requestCollection(item.id);
+                        if (!item.collected) void quickCollect(item.id);
                         else updateItem(item.id, { collected: false });
                       }}
                     >
@@ -1740,7 +1751,7 @@ export default function ApartmentDetail() {
         ) : null}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-lg" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Row 1 — Primary voice action (full width) */}
         <div className="px-2 pt-2 pb-1.5">
           <Button onClick={toggleRecording} size="lg" className="w-full gap-2 h-12 text-base relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
