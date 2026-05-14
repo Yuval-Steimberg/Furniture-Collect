@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, type ChangeEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { addRecording, addImage } from '@/lib/offlineQueue';
@@ -1751,7 +1752,7 @@ export default function ApartmentDetail() {
         ) : null}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-lg" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {createPortal(<div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-lg" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Row 1 — Primary voice action (full width) */}
         <div className="px-2 pt-2 pb-1.5">
           <Button onClick={toggleRecording} size="lg" className="w-full gap-2 h-12 text-base relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
@@ -1902,7 +1903,7 @@ export default function ApartmentDetail() {
           className="hidden"
           onChange={handleRoomImage}
         />
-      </div>
+      </div>, document.body)}
 
       {/* Room sweep — confirmation modal lets the worker uncheck wrong items before inserting */}
       <Dialog open={!!roomDetected} onOpenChange={open => { if (!open) setRoomDetected(null); }}>
