@@ -66,19 +66,27 @@ export function SwipeableRow({
     const dx = info.offset.x;
     const v  = info.velocity.x;
 
-    // Fast/far destructive swipe → commit delete if the delete side is exposed
+    // Fast/far destructive swipe → commit delete immediately
     if (onDelete) {
       const isDeleteSide = direction === 'rtl' ? dx > 0 : dx < 0;
       if (isDeleteSide && (Math.abs(dx) > COMMIT || Math.abs(v) > 800)) {
-        // animate off-screen then fire
         void controls.start({ x: dx > 0 ? 400 : -400, transition: { duration: 0.18 } });
         setTimeout(() => onDelete(), 180);
         return;
       }
     }
 
-    if (dx > REVEAL)  { setRevealed('left');  void controls.start({ x: OPEN,  transition: { type: 'spring', stiffness: 500, damping: 40 } }); return; }
-    if (dx < -REVEAL) { setRevealed('right'); void controls.start({ x: -OPEN, transition: { type: 'spring', stiffness: 500, damping: 40 } }); return; }
+    // Collect side — commit immediately on any swipe past REVEAL, no tap needed
+    if (onToggleCollected) {
+      const isCollectSide = direction === 'rtl' ? dx < 0 : dx > 0;
+      if (isCollectSide && (Math.abs(dx) > REVEAL || Math.abs(v) > 400)) {
+        close();
+        onToggleCollected();
+        return;
+      }
+    }
+
+    if (dx > REVEAL) { setRevealed('left'); void controls.start({ x: OPEN, transition: { type: 'spring', stiffness: 500, damping: 40 } }); return; }
     close();
   };
 
