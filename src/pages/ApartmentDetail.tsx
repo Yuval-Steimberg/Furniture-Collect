@@ -1296,7 +1296,7 @@ export default function ApartmentDetail() {
       </div>
     );
   }
-  return <div className="min-h-screen bg-muted pb-24 w-screen overflow-x-hidden" dir="rtl">
+  return <div className="min-h-screen bg-muted" dir="rtl">
       <PageHeader
         title={`בניין ${apartmentInfo?.building_number} · דירה ${apartmentInfo?.apartment_number}`}
         subtitle={apartmentInfo?.projects?.name}
@@ -1332,7 +1332,7 @@ export default function ApartmentDetail() {
         })()}
       />
 
-      <main className="px-3 sm:px-4 py-4 sm:py-6 w-full">
+      <main className="px-3 sm:px-4 py-4 sm:py-6 pb-32 w-full overflow-x-hidden">
         {/* Apartment navigation — prev/next within same building */}
         {(prevApt || nextApt) && (
           <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
