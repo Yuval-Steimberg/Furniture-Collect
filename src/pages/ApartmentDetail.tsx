@@ -1333,7 +1333,7 @@ export default function ApartmentDetail() {
         })()}
       />
 
-      <main className="px-3 sm:px-4 py-4 sm:py-6 pb-32 w-full overflow-x-hidden">
+      <main className="px-3 sm:px-4 py-4 sm:py-6 pb-40 w-full overflow-x-hidden">
         {/* Apartment navigation — prev/next within same building */}
         {(prevApt || nextApt) && (
           <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
@@ -1753,6 +1753,15 @@ export default function ApartmentDetail() {
       </main>
 
       {createPortal(<div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-lg" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        {/* Apartment context strip — always-visible reminder of which unit is active */}
+        <div className="flex items-center justify-center gap-2 bg-sidebar text-sidebar-foreground px-3 py-1 text-xs font-bold tracking-wide">
+          <span>בניין {apartmentInfo?.building_number}</span>
+          <span className="opacity-40">·</span>
+          <span>דירה {apartmentInfo?.apartment_number}</span>
+          {apartmentInfo?.projects?.name && (
+            <span className="opacity-50 font-normal">— {apartmentInfo.projects.name}</span>
+          )}
+        </div>
         {/* Row 1 — Primary voice action (full width) */}
         <div className="px-2 pt-2 pb-1.5">
           <Button onClick={toggleRecording} size="lg" className="w-full gap-2 h-12 text-base relative" variant={recording ? "destructive" : processing ? "secondary" : "default"} disabled={processing || scanning}>
