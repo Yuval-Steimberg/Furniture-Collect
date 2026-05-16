@@ -1,4 +1,4 @@
-import { Home, FolderOpen, BarChart3, Users, LogOut, LayoutDashboard, Search, X } from 'lucide-react';
+import { Home, FolderOpen, BarChart3, Users, LogOut, LayoutDashboard, Search, X, BookOpen } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffect, useState } from 'react';
@@ -47,6 +47,7 @@ export function AppSidebar() {
     { title: 'חוקר נתונים',       url: '/data-explorer',      icon: Search },
     ...(isManager ? [{ title: 'לוח בקרה',        url: '/manager-dashboard', icon: LayoutDashboard }] : []),
     ...(isAdmin   ? [{ title: 'ניהול משתמשים',   url: '/user-management',   icon: Users }] : []),
+    { title: 'מדריך למשתמש',       url: '/guide',              icon: BookOpen },
   ];
 
   const handleNav = (url: string) => {

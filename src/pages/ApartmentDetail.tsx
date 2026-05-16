@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2, List, LayoutGrid, Pen } from 'lucide-react';
+import { ArrowLeft, Mic, Edit2, Camera, Check, X, Plus, Menu, Trash2, ImagePlus, Sparkles, Scan, Search, Copy, DollarSign, ChevronDown, ChevronUp, MapPin, Package, Ban, User, Images, Repeat2, List, LayoutGrid, Pen, HelpCircle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CameraCapture } from '@/components/CameraCapture';
 import { toast } from 'sonner';
@@ -160,6 +160,7 @@ export default function ApartmentDetail() {
 
   // Bulk collect attribution
   const [showBulkCollectDialog, setShowBulkCollectDialog] = useState(false);
+  const [showModeHelp, setShowModeHelp] = useState(false);
   const [bulkCollectorInput, setBulkCollectorInput] = useState('');
 
   // Multi-photo gallery upload (creates new items)
@@ -1779,29 +1780,29 @@ export default function ApartmentDetail() {
         </div>
         {/* Row 2 — Secondary actions: horizontally scrollable so all are reachable */}
         <div className="flex gap-1.5 overflow-x-auto px-2 pb-2 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-          {/* ── צלם — single-shot: takes ONE photo → AI creates one item ── */}
+          {/* פריט בודד — single-shot: ONE photo → AI creates ONE item */}
           <Button
             onClick={openCameraPicker}
             size="sm"
             variant={scanning && !multiPhotoMode ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiPhotoMode}
-            className="flex-shrink-0 flex-col gap-1 py-1.5 px-3 min-w-[60px] h-auto border-sky-400 text-sky-700 hover:bg-sky-50 disabled:opacity-40"
-            title="צלם פריט — צילום יחיד, AI מזהה ויוצר פריט"
+            className="flex-shrink-0 flex-col gap-0.5 py-1.5 px-3 min-w-[68px] h-auto border-sky-400 text-sky-700 hover:bg-sky-50 disabled:opacity-40"
           >
             {scanning && !multiPhotoMode ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-sky-500" />
             ) : (
               <Camera className="h-4 w-4 text-sky-600" />
             )}
-            <span className="text-[10px] leading-none font-medium">צלם</span>
+            <span className="text-[10px] leading-none font-bold">פריט בודד</span>
+            <span className="text-[9px] leading-none opacity-60">AI מזהה</span>
           </Button>
+          {/* מגלריה — upload photos already taken */}
           <Button
             onClick={openMultiUploadPicker}
             size="sm"
             variant={multiUploading ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiPhotoMode || multiUploading}
-            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
-            title="העלה מספר תמונות מהגלריה — AI מזהה פריט מכל תמונה"
+            className="flex-shrink-0 flex-col gap-0.5 px-3 min-w-[68px] py-1.5 h-auto"
           >
             {multiUploading ? (
               <>
@@ -1813,67 +1814,82 @@ export default function ApartmentDetail() {
             ) : (
               <>
                 <Images className="h-4 w-4" />
-                <span className="text-[10px] leading-none">תמונות</span>
+                <span className="text-[10px] leading-none font-bold">מגלריה</span>
+                <span className="text-[9px] leading-none opacity-60">מה שצילמת</span>
               </>
             )}
           </Button>
-          {/* ── רציף — continuous session: keeps opening camera after each item ── */}
+          {/* כל הדירה — continuous: opens camera again after each item */}
           <Button
             onClick={multiPhotoMode ? endMultiPhotoMode : startMultiPhotoMode}
             size="sm"
             variant={multiPhotoMode ? 'default' : 'outline'}
             disabled={recording || processing || scanning || roomScanning || multiUploading}
-            className={`flex-shrink-0 flex-col gap-1 py-1.5 px-3 min-w-[60px] h-auto ${
+            className={`flex-shrink-0 flex-col gap-0.5 py-1.5 px-3 min-w-[68px] h-auto ${
               multiPhotoMode
                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
                 : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50'
             }`}
-            title={multiPhotoMode ? `עצור סשן רציף (${photoCaptureCount} פריטים)` : 'רציף — פתח סשן צילום רב-פריטי'}
           >
             {multiPhotoMode && scanning ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
             ) : (
               <Repeat2 className="h-4 w-4" />
             )}
-            <span className="text-[10px] leading-none font-medium">
-              {multiPhotoMode ? `עצור (${photoCaptureCount})` : 'רציף'}
+            <span className="text-[10px] leading-none font-bold">
+              {multiPhotoMode ? `עצור (${photoCaptureCount})` : 'כל הדירה'}
             </span>
+            {!multiPhotoMode && <span className="text-[9px] leading-none opacity-60">בזרימה</span>}
           </Button>
-          <Button
-            onClick={() => setShowGuided(true)}
-            size="sm"
-            variant="outline"
-            disabled={recording || processing || scanning || roomScanning}
-            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto border-primary/40"
-            title="סריקה מונחית חדר-חדר"
-          >
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-[10px] leading-none">מונחה</span>
-          </Button>
+          {/* חדר שלם — room sweep: ONE photo → many items */}
           <Button
             onClick={openRoomPicker}
             size="sm"
             variant={roomScanning ? 'secondary' : 'outline'}
             disabled={recording || processing || scanning || roomScanning}
-            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
-            title="סריקת חדר — צילום אחד, פריטים מרובים"
+            className="flex-shrink-0 flex-col gap-0.5 px-3 min-w-[68px] py-1.5 h-auto"
           >
             {roomScanning ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground" />
             ) : (
               <Scan className="h-4 w-4" />
             )}
-            <span className="text-[10px] leading-none">חדר</span>
+            <span className="text-[10px] leading-none font-bold">חדר שלם</span>
+            <span className="text-[9px] leading-none opacity-60">סריקה מלאה</span>
           </Button>
+          {/* בשלבים — guided: room-by-room with prompts */}
+          <Button
+            onClick={() => setShowGuided(true)}
+            size="sm"
+            variant="outline"
+            disabled={recording || processing || scanning || roomScanning}
+            className="flex-shrink-0 flex-col gap-0.5 px-3 min-w-[68px] py-1.5 h-auto border-primary/40"
+          >
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-[10px] leading-none font-bold">בשלבים</span>
+            <span className="text-[9px] leading-none opacity-60">חדר-חדר</span>
+          </Button>
+          {/* ידני */}
           <Button
             onClick={() => setShowManualDialog(true)}
             size="sm"
             variant="outline"
             disabled={recording || processing || scanning}
-            className="flex-shrink-0 gap-1.5 px-3 min-w-[64px] flex-col py-1.5 h-auto"
+            className="flex-shrink-0 flex-col gap-0.5 px-3 min-w-[68px] py-1.5 h-auto"
           >
             <Plus className="h-4 w-4" />
-            <span className="text-[10px] leading-none">ידני</span>
+            <span className="text-[10px] leading-none font-bold">ידנית</span>
+            <span className="text-[9px] leading-none opacity-60">הקלד</span>
+          </Button>
+          {/* מדריך */}
+          <Button
+            onClick={() => setShowModeHelp(true)}
+            size="sm"
+            variant="ghost"
+            className="flex-shrink-0 flex-col gap-0.5 px-3 min-w-[56px] py-1.5 h-auto text-muted-foreground"
+          >
+            <HelpCircle className="h-4 w-4" />
+            <span className="text-[9px] leading-none">מדריך</span>
           </Button>
         </div>
         {/* Hidden file input — opens the device camera on mobile, file picker on desktop. */}
@@ -2361,5 +2377,91 @@ export default function ApartmentDetail() {
         onClose={() => setAnnotatingItem(null)}
         onSave={(blob) => { if (annotatingItem) handleAnnotationSave(blob, annotatingItem); }}
       />
+
+      {/* Mode help sheet */}
+      <Dialog open={showModeHelp} onOpenChange={setShowModeHelp}>
+        <DialogContent dir="rtl" className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <HelpCircle className="h-5 w-5 text-primary" />
+              מדריך מצבי עבודה
+            </DialogTitle>
+            <DialogDescription>בחר את המצב שמתאים לצורת העבודה שלך בשטח</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            {[
+              {
+                icon: <Mic className="h-5 w-5 text-primary" />,
+                name: 'הקלטה קולית',
+                tag: 'מהיר ביותר',
+                tagColor: 'bg-primary/10 text-primary',
+                when: 'כשהידיים עסוקות או כשרוצים לתעד הרבה פריטים בלי לעצור',
+                advantage: 'מדברים בטבעיות — "שתי כורסאות עץ בסלון" — והAI מפרק לפריטים',
+              },
+              {
+                icon: <Camera className="h-5 w-5 text-sky-600" />,
+                name: 'פריט בודד',
+                tag: 'מדויק',
+                tagColor: 'bg-sky-100 text-sky-700',
+                when: 'כשצריך לתעד פריט ספציפי עם תמונה ברורה',
+                advantage: 'צילום אחד → AI מזהה את הפריט ויוצר כרטיס אוטומטי',
+              },
+              {
+                icon: <Images className="h-5 w-5" />,
+                name: 'מגלריה',
+                tag: 'גמיש',
+                tagColor: 'bg-muted text-muted-foreground',
+                when: 'כשצילמת את הדירה קודם ועכשיו מעלים מהגלריה',
+                advantage: 'לא צריך להיות בדירה — אפשר לתעד בשקט מבחוץ אחרי הביקור',
+              },
+              {
+                icon: <Repeat2 className="h-5 w-5 text-emerald-600" />,
+                name: 'כל הדירה — בזרימה',
+                tag: 'מהיר בשטח',
+                tagColor: 'bg-emerald-100 text-emerald-700',
+                when: 'כשעוברים בכל הדירה ומצלמים פריט אחרי פריט ברצף',
+                advantage: 'המצלמה נפתחת מחדש אחרי כל פריט — ממשיכים ללא הפסקה',
+              },
+              {
+                icon: <Scan className="h-5 w-5" />,
+                name: 'חדר שלם — סריקה מלאה',
+                tag: 'יעיל',
+                tagColor: 'bg-amber-100 text-amber-700',
+                when: 'כשנמצאים בחדר ספציפי ורוצים לתעד הכל בצילום אחד',
+                advantage: 'AI מזהה את כל הפריטים בתמונה — מסמנים מה רלוונטי ומוחקים מה שלא',
+              },
+              {
+                icon: <Sparkles className="h-5 w-5 text-primary" />,
+                name: 'בשלבים — חדר-חדר',
+                tag: 'מקיף',
+                tagColor: 'bg-primary/10 text-primary',
+                when: 'כשרוצים לוודא שלא פספסו אף חדר',
+                advantage: 'המערכת מנחה חדר אחרי חדר — פחות פספוסים, מיפוי מסודר',
+              },
+              {
+                icon: <Plus className="h-5 w-5" />,
+                name: 'ידנית — הקלד',
+                tag: 'בקרה מלאה',
+                tagColor: 'bg-muted text-muted-foreground',
+                when: 'כשרוצים להוסיף פריט עם שם מדויק שנבחר ידנית',
+                advantage: 'שליטה מלאה על הפרטים — שם, כמות, חדר, חומר',
+              },
+            ].map(m => (
+              <div key={m.name} className="flex gap-3 p-3 rounded-xl border bg-card">
+                <div className="mt-0.5 flex-shrink-0">{m.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-sm">{m.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${m.tagColor}`}>{m.tag}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5"><span className="font-medium text-foreground">מתי: </span>{m.when}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5"><span className="font-medium text-foreground">יתרון: </span>{m.advantage}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Button className="w-full mt-2" onClick={() => setShowModeHelp(false)}>הבנתי, תודה</Button>
+        </DialogContent>
+      </Dialog>
     </div>;
 }
