@@ -27,6 +27,7 @@ import CollectionPrep from "./pages/CollectionPrep";
 import LiveReport from "./pages/LiveReport";
 import NotFound from "./pages/NotFound";
 import Demo from "./pages/Demo";
+import UserGuide from "./pages/UserGuide";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ function AnimatedRoutes() {
         <Route path="/manager-dashboard" element={<AppLayout><PageTransition><ManagerDashboard /></PageTransition></AppLayout>} />
         <Route path="/user-management" element={<AppLayout><PageTransition><UserManagement /></PageTransition></AppLayout>} />
         <Route path="/demo" element={<PageTransition><Demo /></PageTransition>} />
+        <Route path="/guide" element={<AppLayout><PageTransition><UserGuide /></PageTransition></AppLayout>} />
         <Route path="*" element={<AppLayout><PageTransition><NotFound /></PageTransition></AppLayout>} />
       </Routes>
     </AnimatePresence>
