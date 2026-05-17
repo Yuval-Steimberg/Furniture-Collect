@@ -269,8 +269,12 @@ export default function ApartmentDetail() {
       const newUrl = publicData.publicUrl;
       const existingUrls: string[] = item.photo_urls?.length ? item.photo_urls : item.image_url ? [item.image_url] : [];
       const allUrls = [newUrl, ...existingUrls];
-      const { error: updateError } = await supabase.from('items').update({ photo_urls: allUrls, image_url: newUrl } as any).eq('id', item.id);
-      if (updateError) throw updateError;
+      let { error: updateError } = await supabase.from('items').update({ photo_urls: allUrls, image_url: newUrl } as any).eq('id', item.id);
+      if (updateError) {
+        // photo_urls column may not exist in production yet — fall back to image_url only
+        const retry = await supabase.from('items').update({ image_url: newUrl } as any).eq('id', item.id);
+        if (retry.error) throw retry.error;
+      }
       toast.success('הערה נשמרה על התמונה');
       await loadData();
     } catch (err: any) {
