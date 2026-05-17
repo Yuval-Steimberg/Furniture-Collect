@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Pen, Eraser, Trash2, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -133,7 +134,7 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] bg-black flex flex-col" dir="rtl">
       {/* Top toolbar */}
       <div className="flex items-center gap-2 px-3 py-2 bg-black/90 border-b border-white/10 flex-shrink-0">
@@ -257,6 +258,7 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
           שמור
         </Button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
