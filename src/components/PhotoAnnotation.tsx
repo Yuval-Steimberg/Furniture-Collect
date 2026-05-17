@@ -53,15 +53,32 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
     canvas.height = img.naturalHeight;
   }, []);
 
+  // Map a pointer event to canvas-internal coordinates, correctly accounting
+  // for object-contain letterboxing so strokes land on the right image pixels.
   const getCanvasPos = (e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    // Scale from display size to canvas internal resolution
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const rect = canvas.getBoundingClientRect(); // full container rect
+    const imgAspect = canvas.width / canvas.height;
+    const containerAspect = rect.width / rect.height;
+
+    let imgW: number, imgH: number, imgLeft: number, imgTop: number;
+    if (imgAspect > containerAspect) {
+      // Landscape image: fills width, letterboxed top/bottom
+      imgW = rect.width;
+      imgH = rect.width / imgAspect;
+      imgLeft = 0;
+      imgTop = (rect.height - imgH) / 2;
+    } else {
+      // Portrait image: fills height, pillarboxed left/right
+      imgH = rect.height;
+      imgW = rect.height * imgAspect;
+      imgLeft = (rect.width - imgW) / 2;
+      imgTop = 0;
+    }
+
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: ((e.clientX - rect.left - imgLeft) / imgW) * canvas.width,
+      y: ((e.clientY - rect.top - imgTop) / imgH) * canvas.height,
     };
   };
 
@@ -114,16 +131,32 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
     ctx?.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  const handleSave = () => {
-    const img = imageRef.current;
+  const handleSave = async () => {
     const canvas = canvasRef.current;
-    if (!img || !canvas) return;
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return;
+
     const out = document.createElement('canvas');
     out.width = canvas.width;
     out.height = canvas.height;
     const ctx = out.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, out.width, out.height);
+
+    // Fetch the image as a blob so drawImage never taints the output canvas
+    // (avoids SecurityError on CORS-restricted origins, incl. Safari iOS).
+    try {
+      const resp = await fetch(imageUrl);
+      const imgBlob = await resp.blob();
+      const bitmap = await createImageBitmap(imgBlob);
+      ctx.drawImage(bitmap, 0, 0, out.width, out.height);
+      bitmap.close();
+    } catch {
+      // Fallback: draw from the already-loaded img element
+      const img = imageRef.current;
+      if (img) ctx.drawImage(img, 0, 0, out.width, out.height);
+    }
+
+    // Overlay the annotation strokes
     ctx.drawImage(canvas, 0, 0);
+
     out.toBlob(blob => {
       if (blob) {
         onSave(blob);
