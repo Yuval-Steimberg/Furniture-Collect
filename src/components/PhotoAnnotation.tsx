@@ -7,7 +7,7 @@ interface Props {
   open: boolean;
   imageUrl: string;
   onClose: () => void;
-  onSave: (annotatedBlob: Blob) => void;
+  onSave: (annotatedBlob: Blob) => Promise<void>;
 }
 
 const COLOR_SWATCHES = [
@@ -28,8 +28,9 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
   const [lineWidth, setLineWidth] = useState(4);
   const [drawing, setDrawing] = useState(false);
   const [lastPos, setLastPos] = useState<{ x: number; y: number } | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
-  // Clear canvas when closed
+  // Clear canvas and state when overlay is closed
   useEffect(() => {
     if (!open) {
       const canvas = canvasRef.current;
@@ -42,6 +43,7 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
       setLineWidth(4);
       setDrawing(false);
       setLastPos(null);
+      setImageLoaded(false);
     }
   }, [open]);
 
@@ -49,8 +51,13 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
     const img = imageRef.current;
     const canvas = canvasRef.current;
     if (!img || !canvas) return;
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    // Only resize (which clears the canvas) when dimensions actually change,
+    // so a CORS re-fetch of the same image doesn't wipe existing strokes.
+    if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+    }
+    setImageLoaded(true);
   }, []);
 
   // Map a pointer event to canvas-internal coordinates, correctly accounting
@@ -133,15 +140,22 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
 
   const handleSave = async () => {
     const canvas = canvasRef.current;
-    if (!canvas || canvas.width === 0 || canvas.height === 0) return;
+    if (!canvas || !imageLoaded) return;
+
+    // Capture the annotation strokes SYNCHRONOUSLY before any async work so
+    // a concurrent re-render or CORS re-fetch can't clear the canvas under us.
+    const snapshot = document.createElement('canvas');
+    snapshot.width = canvas.width;
+    snapshot.height = canvas.height;
+    snapshot.getContext('2d')!.drawImage(canvas, 0, 0);
 
     const out = document.createElement('canvas');
     out.width = canvas.width;
     out.height = canvas.height;
     const ctx = out.getContext('2d')!;
 
-    // Fetch the image as a blob so drawImage never taints the output canvas
-    // (avoids SecurityError on CORS-restricted origins, incl. Safari iOS).
+    // Fetch the image as a blob — avoids CORS canvas-taint on Safari iOS
+    // which would make toBlob() throw a SecurityError.
     try {
       const resp = await fetch(imageUrl);
       const imgBlob = await resp.blob();
@@ -149,17 +163,17 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
       ctx.drawImage(bitmap, 0, 0, out.width, out.height);
       bitmap.close();
     } catch {
-      // Fallback: draw from the already-loaded img element
+      // Fallback to the already-loaded img element
       const img = imageRef.current;
       if (img) ctx.drawImage(img, 0, 0, out.width, out.height);
     }
 
-    // Overlay the annotation strokes
-    ctx.drawImage(canvas, 0, 0);
+    // Overlay annotation snapshot
+    ctx.drawImage(snapshot, 0, 0);
 
-    out.toBlob(blob => {
+    out.toBlob(async blob => {
       if (blob) {
-        onSave(blob);
+        await onSave(blob); // await so canvas isn't cleared mid-upload
         onClose();
       }
     }, 'image/jpeg', 0.92);
@@ -184,6 +198,7 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
           size="sm"
           className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
           onClick={handleSave}
+          disabled={!imageLoaded}
         >
           <Check className="h-4 w-4" />
           שמור
@@ -192,7 +207,6 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
 
       {/* Canvas area */}
       <div className="flex-1 relative overflow-hidden flex items-center justify-center min-h-0">
-        {/* Hidden source image — used only for drawing onto the output canvas */}
         {/* eslint-disable-next-line jsx-a11y/alt-text */}
         <img
           ref={imageRef}
@@ -286,6 +300,7 @@ export function PhotoAnnotation({ open, imageUrl, onClose, onSave }: Props) {
           size="sm"
           className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
           onClick={handleSave}
+          disabled={!imageLoaded}
         >
           <Check className="h-4 w-4" />
           שמור
