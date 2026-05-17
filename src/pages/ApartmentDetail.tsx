@@ -126,6 +126,8 @@ export default function ApartmentDetail() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const itemPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const roomInputRef = useRef<HTMLInputElement | null>(null);
+  // Gallery double-tap detector — tracks last tap per item
+  const galleryTapRef = useRef<{ id: string; time: number; timer: ReturnType<typeof setTimeout> } | null>(null);
   const multiUploadInputRef = useRef<HTMLInputElement | null>(null);
   const continueInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -1473,12 +1475,31 @@ export default function ApartmentDetail() {
               {filteredItems
                 .filter(i => i.image_url || (i.photo_urls?.length ?? 0) > 0)
                 .map(item => {
-                  const photoIdx = photoItems.findIndex(p => p.id === item.id && (p as any)._photoIdx === 0);
+                  const handleGalleryTap = () => {
+                    const now = Date.now();
+                    const prev = galleryTapRef.current;
+                    if (prev?.id === item.id && now - prev.time < 300) {
+                      // Double tap — toggle לאיסוף
+                      clearTimeout(prev.timer);
+                      galleryTapRef.current = null;
+                      void updateItem(item.id, { intended_for_collection: !item.intended_for_collection });
+                    } else {
+                      // First tap — wait to distinguish from double tap, then open annotation
+                      if (prev) clearTimeout(prev.timer);
+                      const timer = setTimeout(() => {
+                        if (galleryTapRef.current?.id === item.id) {
+                          galleryTapRef.current = null;
+                          setAnnotatingItem(item);
+                        }
+                      }, 280);
+                      galleryTapRef.current = { id: item.id, time: now, timer };
+                    }
+                  };
                   return (
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setLightboxIndex(photoIdx >= 0 ? photoIdx : 0)}
+                      onClick={handleGalleryTap}
                       className="relative rounded-xl overflow-hidden aspect-square bg-muted group active:scale-95 transition-transform duration-150"
                     >
                       <img
@@ -1488,20 +1509,30 @@ export default function ApartmentDetail() {
                         loading="lazy"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                      <div className="absolute bottom-0 inset-x-0 p-2 text-right">
-                        <p className="text-white text-xs font-semibold line-clamp-2 leading-tight">{item.description}</p>
-                        {item.location && <p className="text-white/70 text-[10px]">{item.location}</p>}
+                      {/* top-right: collection status badge */}
+                      <div className="absolute top-1.5 right-1.5 flex gap-1">
+                        {item.intended_for_collection && (
+                          <span className="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">לאיסוף</span>
+                        )}
                         {item.collected && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] bg-emerald-500 text-white rounded-full px-1.5 py-0.5 mt-0.5">
+                          <span className="inline-flex items-center gap-0.5 text-[9px] bg-emerald-500 text-white rounded-full px-1.5 py-0.5">
                             <Check className="h-2.5 w-2.5" strokeWidth={2.5} /> נאסף
                           </span>
                         )}
+                      </div>
+                      <div className="absolute bottom-0 inset-x-0 p-2 text-right">
+                        <p className="text-white text-xs font-semibold line-clamp-2 leading-tight">{item.description}</p>
+                        {item.location && <p className="text-white/70 text-[10px]">{item.location}</p>}
                       </div>
                       {(item.photo_urls?.length ?? 0) > 1 && (
                         <span className="absolute top-1.5 left-1.5 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                           {item.photo_urls!.length}
                         </span>
                       )}
+                      {/* annotation hint overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-active:opacity-100 transition-opacity pointer-events-none">
+                        <div className="bg-black/40 rounded-xl px-3 py-1.5 text-white text-xs font-medium">✏️ לציור · ×2 לאיסוף</div>
+                      </div>
                     </button>
                   );
                 })}
