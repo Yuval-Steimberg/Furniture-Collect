@@ -269,7 +269,8 @@ export default function ApartmentDetail() {
       const newUrl = publicData.publicUrl;
       const existingUrls: string[] = item.photo_urls?.length ? item.photo_urls : item.image_url ? [item.image_url] : [];
       const allUrls = [newUrl, ...existingUrls];
-      await supabase.from('items').update({ photo_urls: allUrls, image_url: newUrl } as any).eq('id', item.id);
+      const { error: updateError } = await supabase.from('items').update({ photo_urls: allUrls, image_url: newUrl } as any).eq('id', item.id);
+      if (updateError) throw updateError;
       toast.success('הערה נשמרה על התמונה');
       await loadData();
     } catch (err: any) {
@@ -2430,7 +2431,7 @@ export default function ApartmentDetail() {
         open={annotatingItem !== null}
         imageUrl={annotatingItem?.image_url ?? annotatingItem?.photo_urls?.[0] ?? ''}
         onClose={() => setAnnotatingItem(null)}
-        onSave={(blob) => { if (annotatingItem) handleAnnotationSave(blob, annotatingItem); }}
+        onSave={(blob) => annotatingItem ? handleAnnotationSave(blob, annotatingItem) : Promise.resolve()}
       />
 
       {/* Mode help sheet */}
