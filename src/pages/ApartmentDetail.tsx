@@ -25,6 +25,7 @@ import { SkeletonItemRow } from '@/components/SkeletonCard';
 import { SwipeableRow } from '@/components/SwipeableRow';
 import { GuidedWalkthrough } from '@/components/GuidedWalkthrough';
 import { PhotoAnnotation } from '@/components/PhotoAnnotation';
+import { ITEM_CATEGORIES } from '@/lib/itemCategories';
 import { logAudit } from '@/lib/auditLog';
 import { fireWebhooks } from '@/components/WebhookManager';
 
@@ -82,6 +83,7 @@ interface Item {
   condition?: 'as_new' | 'good' | 'needs_repair' | 'scrap_only' | null;
   ai_confidence?: number | null;
   source?: 'voice' | 'text' | 'image' | 'manual' | null;
+  item_category?: string | null;
   estimated_resale_ils?: number | null;
   duplicate_of?: string | null;
   created_by_user_id: string;
@@ -415,6 +417,7 @@ export default function ApartmentDetail() {
         intended_for_collection: item.intended_for_collection,
         item_type: item.item_type as any,
         material_category: item.material_category as any,
+        item_category: (item as any).item_category || null,
         created_by_user_id: user.id
       }));
       
@@ -483,6 +486,7 @@ export default function ApartmentDetail() {
         intended_for_collection: item.intended_for_collection,
         item_type: item.item_type as any,
         material_category: item.material_category as any,
+        item_category: item.item_category || null,
         created_by_user_id: user.id
       }));
       const { data: inserted, error: insertError } = await supabase
@@ -557,6 +561,7 @@ export default function ApartmentDetail() {
         intended_for_collection: parsed.intended_for_collection ?? true,
         item_type: parsed.item_type ?? 'furniture',
         material_category: parsed.material_category ?? 'other',
+        item_category: parsed.item_category ?? null,
         estimated_weight_kg: parsed.estimated_weight_kg ?? null,
         ai_confidence: parsed.confidence ?? null,
         image_url: publicData.publicUrl, photo_urls: [publicData.publicUrl],
@@ -736,6 +741,7 @@ export default function ApartmentDetail() {
           intended_for_collection: parsed.intended_for_collection !== false,
           item_type: parsed.item_type as any,
           material_category: parsed.material_category as any,
+          item_category: parsed.item_category ?? null,
           estimated_weight_kg: parsed.estimated_weight_kg ?? null,
           condition: parsed.condition as any,
           ai_confidence: parsed.ai_confidence ?? null,
@@ -812,6 +818,7 @@ export default function ApartmentDetail() {
           intended_for_collection: p.intended_for_collection !== false,
           item_type: p.item_type as any,
           material_category: p.material_category as any,
+          item_category: (p as any).item_category ?? null,
           estimated_weight_kg: p.estimated_weight_kg ?? null,
           condition: p.condition as any,
           ai_confidence: p.ai_confidence ?? null,
@@ -1651,6 +1658,7 @@ export default function ApartmentDetail() {
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                         <span className="whitespace-nowrap">כמות: {item.quantity}</span>
                         {item.location && <><span>•</span><span className="break-words">{item.location}</span></>}
+                        {item.item_category && <><span>•</span><span className="whitespace-nowrap font-medium text-foreground/70">{item.item_category}</span></>}
                         <span>•</span>
                         <span className="capitalize whitespace-nowrap">{item.material_category}</span>
                         {item.estimated_weight_kg != null && (
@@ -2070,6 +2078,13 @@ export default function ApartmentDetail() {
                 <Input value={editingItem.description} onChange={e => setEditingItem({ ...editingItem, description: e.target.value })} />
               </div>
               <div>
+                <Label>קטגוריה</Label>
+                <Select value={editingItem.item_category ?? ''} onValueChange={value => setEditingItem({ ...editingItem, item_category: value })}>
+                  <SelectTrigger><SelectValue placeholder="בחר קטגוריה" /></SelectTrigger>
+                  <SelectContent>{ITEM_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label>כמות</Label>
                 <Input type="number" value={editingItem.quantity} onChange={e => setEditingItem({ ...editingItem, quantity: parseInt(e.target.value) || 1 })} />
               </div>
@@ -2106,7 +2121,7 @@ export default function ApartmentDetail() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => { updateItem(editingItem.id, { description: editingItem.description, quantity: editingItem.quantity, location: editingItem.location, item_type: editingItem.item_type, material_category: editingItem.material_category }); setShowEditDialog(false); }} className="w-full">
+              <Button onClick={() => { updateItem(editingItem.id, { description: editingItem.description, quantity: editingItem.quantity, location: editingItem.location, item_type: editingItem.item_type, material_category: editingItem.material_category, item_category: editingItem.item_category ?? null } as any); setShowEditDialog(false); }} className="w-full">
                 שמור שינויים
               </Button>
               <Button type="button" variant="outline" onClick={async () => { if (!editingItem) return; await estimateResale(editingItem); setShowEditDialog(false); }} className="w-full gap-2">
@@ -2130,8 +2145,16 @@ export default function ApartmentDetail() {
                 <Label>תיאור</Label>
                 <Input value={editingItem.description} onChange={e => setEditingItem({
               ...editingItem,
+
               description: e.target.value
             })} />
+              </div>
+              <div>
+                <Label>קטגוריה</Label>
+                <Select value={editingItem.item_category ?? ''} onValueChange={value => setEditingItem({ ...editingItem, item_category: value })}>
+                  <SelectTrigger><SelectValue placeholder="בחר קטגוריה" /></SelectTrigger>
+                  <SelectContent>{ITEM_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>כמות</Label>
@@ -2192,8 +2215,9 @@ export default function ApartmentDetail() {
               quantity: editingItem.quantity,
               location: editingItem.location,
               item_type: editingItem.item_type,
-              material_category: editingItem.material_category
-            });
+              material_category: editingItem.material_category,
+              item_category: editingItem.item_category ?? null,
+            } as any);
             setShowEditDialog(false);
           }} className="w-full">
                 שמור שינויים

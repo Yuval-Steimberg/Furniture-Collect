@@ -13,6 +13,7 @@ interface ParsedItem {
   intended_for_collection: boolean;
   item_type: string;
   material_category: string;
+  item_category: string;
 }
 
 serve(async (req) => {
@@ -98,6 +99,7 @@ Where:
 - intended_for_collection: false if "לא לקחת" / similar; else true
 - item_type: furniture/appliance/textile/small_item/other
 - material_category: glass/aluminum/wood/plastic/metal/textile/electrical/other
+- item_category: choose the SINGLE closest match from this list: שידות|מדפים|שולחן אוכל|שולחן קפה|כורסא|ספה|שרפרפים|כיסאות|ארון ויטרינה|דלתות ארון|דלת תריס|ברזים|כיורים|גופי תאורה|ידיות|מגירות|מתלים|חומרי ניקוי|כלים|מראות|תמונות|שונות|אופניים|מזגנים|חלונות אלומיניום
 - description: Hebrew, concise
 
 If "command" → return:

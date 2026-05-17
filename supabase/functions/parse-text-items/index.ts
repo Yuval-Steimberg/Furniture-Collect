@@ -17,7 +17,10 @@ interface ParsedItem {
   intended_for_collection: boolean;
   item_type: string;
   material_category: string;
+  item_category: string;
 }
+
+const ITEM_CATEGORY_LIST = "שידות|מדפים|שולחן אוכל|שולחן קפה|כורסא|ספה|שרפרפים|כיסאות|ארון ויטרינה|דלתות ארון|דלת תריס|ברזים|כיורים|גופי תאורה|ידיות|מגירות|מתלים|חומרי ניקוי|כלים|מראות|תמונות|שונות|אופניים|מזגנים|חלונות אלומיניום";
 
 const PARSE_PROMPT = (text: string) => `You are a Hebrew-speaking assistant helping parse text descriptions of apartment items during evacuation documentation.
 
@@ -28,9 +31,10 @@ Parse the following Hebrew text into a JSON array of items. For each item extrac
 - intended_for_collection (false if "לא לקחת" or similar negation; else true)
 - item_type (one of: furniture, appliance, textile, small_item, other)
 - material_category (one of: glass, aluminum, wood, plastic, metal, textile, electrical, other)
+- item_category (choose the SINGLE closest match from: ${ITEM_CATEGORY_LIST})
 
 If you cannot understand an item at all, return:
-{"description":"פריט לא זוהה – ערוך ידנית","quantity":1,"location":"","intended_for_collection":true,"item_type":"other","material_category":"other"}
+{"description":"פריט לא זוהה – ערוך ידנית","quantity":1,"location":"","intended_for_collection":true,"item_type":"other","material_category":"other","item_category":"שונות"}
 
 Text to parse:
 ${text}

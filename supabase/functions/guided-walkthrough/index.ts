@@ -52,6 +52,7 @@ const SYSTEM_PROMPT = `אתה עוזר קולי לתיעוד פריטי דירה
       "intended_for_collection": <true/false>,
       "item_type": "furniture|appliance|textile|small_item|other",
       "material_category": "glass|aluminum|wood|plastic|metal|textile|electrical|other",
+      "item_category": "closest from: שידות|מדפים|שולחן אוכל|שולחן קפה|כורסא|ספה|שרפרפים|כיסאות|ארון ויטרינה|דלתות ארון|דלת תריס|ברזים|כיורים|גופי תאורה|ידיות|מגירות|מתלים|חומרי ניקוי|כלים|מראות|תמונות|שונות|אופניים|מזגנים|חלונות אלומיניום",
       "estimated_weight_kg": <מספר>,
       "condition": "as_new|good|needs_repair|scrap_only"
     }

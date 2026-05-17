@@ -16,9 +16,10 @@ const corsHeaders = {
 
 // Terse multi-item prompt. Quantity-collapse rule kept explicit since it's
 // the most common failure mode.
+const ITEM_CATEGORY_LIST = "שידות|מדפים|שולחן אוכל|שולחן קפה|כורסא|ספה|שרפרפים|כיסאות|ארון ויטרינה|דלתות ארון|דלת תריס|ברזים|כיורים|גופי תאורה|ידיות|מגירות|מתלים|חומרי ניקוי|כלים|מראות|תמונות|שונות|אופניים|מזגנים|חלונות אלומיניום";
 const ROOM_PROMPT = `חדר שלם. זהה רהיטים, מכשירים, טקסטיל, פריטים קטנים משמעותיים. דלג על זוטות (כוסות, עטים).
 החזר {"items":[...]}  — לא markdown. כל פריט:
-description(עברית), quantity(int; 4 כיסאות זהים = פריט אחד qty:4), location(סלון/מטבח/חדר שינה/מרפסת/שירותים or ""), intended_for_collection(bool), item_type(furniture|appliance|textile|small_item|other), material_category(glass|aluminum|wood|plastic|metal|textile|electrical|other), estimated_weight_kg(int), condition(as_new|good|needs_repair|scrap_only), ai_confidence(0..1), detected_labels([3-5 English]).`;
+description(עברית), quantity(int; 4 כיסאות זהים = פריט אחד qty:4), location(סלון/מטבח/חדר שינה/מרפסת/שירותים or ""), intended_for_collection(bool), item_type(furniture|appliance|textile|small_item|other), material_category(glass|aluminum|wood|plastic|metal|textile|electrical|other), item_category(closest from: ${ITEM_CATEGORY_LIST}), estimated_weight_kg(int), condition(as_new|good|needs_repair|scrap_only), ai_confidence(0..1), detected_labels([3-5 English]).`;
 
 const ITEM_TYPES = new Set(["furniture", "appliance", "textile", "small_item", "other"]);
 const MATERIALS  = new Set(["glass", "aluminum", "wood", "plastic", "metal", "textile", "electrical", "other"]);
@@ -35,6 +36,7 @@ function normalise(raw: Record<string, unknown>): Record<string, unknown> {
     intended_for_collection: raw.intended_for_collection !== false,
     item_type: ITEM_TYPES.has(raw.item_type as string) ? raw.item_type : "other",
     material_category: MATERIALS.has(raw.material_category as string) ? raw.material_category : "other",
+    item_category: typeof raw.item_category === "string" ? raw.item_category : "שונות",
     estimated_weight_kg: Number.isFinite(w) && w > 0 ? Math.round(w) : 5,
     condition: CONDITIONS.has(raw.condition as string) ? raw.condition : "good",
     ai_confidence: Number.isFinite(c) ? Math.max(0, Math.min(1, c)) : 0.5,

@@ -29,6 +29,7 @@ interface ParsedImageItem {
   intended_for_collection: boolean;
   item_type: "furniture" | "appliance" | "textile" | "small_item" | "other";
   material_category: "glass" | "aluminum" | "wood" | "plastic" | "metal" | "textile" | "electrical" | "other";
+  item_category: string;
   estimated_weight_kg: number;
   condition: "as_new" | "good" | "needs_repair" | "scrap_only";
   ai_confidence: number;
@@ -37,8 +38,9 @@ interface ParsedImageItem {
 
 // Token-minimal prompt. Field semantics encoded in the enum lists and
 // the single weight example line; Claude infers the rest.
+const ITEM_CATEGORY_LIST = "שידות|מדפים|שולחן אוכל|שולחן קפה|כורסא|ספה|שרפרפים|כיסאות|ארון ויטרינה|דלתות ארון|דלת תריס|ברזים|כיורים|גופי תאורה|ידיות|מגירות|מתלים|חומרי ניקוי|כלים|מראות|תמונות|שונות|אופניים|מזגנים|חלונות אלומיניום";
 const VISION_PROMPT = `פריט ביתי אחד. החזר JSON (Hebrew descriptions, no markdown):
-description(<60ch), quantity, location(סלון/מטבח/חדר שינה/מרפסת/שירותים or ""), intended_for_collection(bool; false=broken/unsafe), item_type(furniture|appliance|textile|small_item|other), material_category(glass|aluminum|wood|plastic|metal|textile|electrical|other), estimated_weight_kg(int; ספה~45 כיסא~6 מזרן~25 מקרר~70 שולחן~35 ארון~50), condition(as_new|good|needs_repair|scrap_only), ai_confidence(0..1), detected_labels([3-5 English tags]).`;
+description(<60ch), quantity, location(סלון/מטבח/חדר שינה/מרפסת/שירותים or ""), intended_for_collection(bool; false=broken/unsafe), item_type(furniture|appliance|textile|small_item|other), material_category(glass|aluminum|wood|plastic|metal|textile|electrical|other), item_category(closest match from: ${ITEM_CATEGORY_LIST}), estimated_weight_kg(int; ספה~45 כיסא~6 שידה~30 מדף~15 שולחן אוכל~40 שולחן קפה~15 כורסא~25 שרפרף~5 ארון~60 מזגן~25 אופניים~15 מראה~10 כיור~15 גוף תאורה~3), condition(as_new|good|needs_repair|scrap_only), ai_confidence(0..1), detected_labels([3-5 English tags]).`;
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {

@@ -27,6 +27,7 @@ interface PendingItem {
   intended_for_collection: boolean;
   item_type: string;
   material_category: string;
+  item_category?: string;
   estimated_weight_kg?: number;
   condition?: string;
 }
@@ -197,6 +198,7 @@ export function GuidedWalkthrough({ open, onClose, projectId, apartmentId, apart
         intended_for_collection: p.intended_for_collection !== false,
         item_type: p.item_type as any,
         material_category: p.material_category as any,
+        item_category: p.item_category ?? null,
         estimated_weight_kg: p.estimated_weight_kg ?? null,
         condition: (p.condition ?? null) as any,
         source: 'voice' as any,
